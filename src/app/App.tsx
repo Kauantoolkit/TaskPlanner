@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, CalendarCheck2, ListTodo } from 'lucide-react';
+import { Search, CalendarCheck2, ListTodo, Menu, X } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TaskItem } from './components/TaskItem';
 import { AddTaskModal } from './components/AddTaskModal';
@@ -18,6 +18,8 @@ import { MembersModal } from './components/MembersModal';
 import { AuthProvider } from './components/AuthProvider';
 import { LocalModeBanner } from './components/LocalModeBanner';
 import { AdBanner } from './components/AdBanner';
+import { useIsMobile } from './components/ui/use-mobile';
+import { Sheet, SheetContent, SheetTrigger } from './components/ui/sheet';
 
 const INITIAL_CATEGORIES: Category[] = [
   { id: '1', name: 'Trabalho', color: 'bg-blue-500 text-white' },
@@ -45,6 +47,7 @@ function AppContent() {
   const [tasks, setTasks] = useLocalStorage<Task[]>('agenda-tasks', []);
   const [categories, setCategories] = useLocalStorage<Category[]>('agenda-categories', INITIAL_CATEGORIES);
   const [settings, setSettings] = useLocalStorage<Settings>('agenda-settings', INITIAL_SETTINGS);
+  const isMobile = useIsMobile();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'planner' | 'calendar'>('planner');
@@ -54,6 +57,7 @@ function AppContent() {
   const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
@@ -62,15 +66,12 @@ function AppContent() {
       const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
-      // Permanent tasks always show
       if (task.isPermanent) return true;
       
-      // Delivery tasks show from today until delivery date
       if (task.isDelivery && task.deliveryDate) {
         return formattedSelectedDate <= task.deliveryDate;
       }
       
-      // Regular tasks show only on their date
       return task.date === formattedSelectedDate;
     });
   }, [tasks, formattedSelectedDate, searchQuery]);
@@ -190,46 +191,88 @@ function AppContent() {
       <Toaster position="top-right" />
       
       <div className="flex h-full w-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        <Sidebar 
-          selectedDate={selectedDate} 
-          onDateChange={setSelectedDate} 
-          onAddTask={() => setIsModalOpen(true)}
-          onOpenCategories={() => setIsCategoryModalOpen(true)}
-          onOpenSettings={() => setIsSettingsModalOpen(true)}
-          onViewChange={setCurrentView}
-          currentView={currentView}
-          onOpenMembers={() => setIsMembersModalOpen(true)}
-        />
+        {isMobile ? (
+          <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+            <SheetTrigger asChild>
+              <button className="fixed top-4 left-4 z-50 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <Menu size={24} />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80 p-0 bg-white dark:bg-gray-950">
+              <Sidebar 
+                selectedDate={selectedDate} 
+                onDateChange={(date) => {
+                  setSelectedDate(date);
+                  setIsSidebarOpen(false);
+                }} 
+                onAddTask={() => {
+                  setIsModalOpen(true);
+                  setIsSidebarOpen(false);
+                }}
+                onOpenCategories={() => {
+                  setIsCategoryModalOpen(true);
+                  setIsSidebarOpen(false);
+                }}
+                onOpenSettings={() => {
+                  setIsSettingsModalOpen(true);
+                  setIsSidebarOpen(false);
+                }}
+                onViewChange={(view) => {
+                  setCurrentView(view);
+                  setIsSidebarOpen(false);
+                }}
+                currentView={currentView}
+                onOpenMembers={() => {
+                  setIsMembersModalOpen(true);
+                  setIsSidebarOpen(false);
+                }}
+              />
+            </SheetContent>
+          </Sheet>
+        ) : (
+          <Sidebar 
+            selectedDate={selectedDate} 
+            onDateChange={setSelectedDate} 
+            onAddTask={() => setIsModalOpen(true)}
+            onOpenCategories={() => setIsCategoryModalOpen(true)}
+            onOpenSettings={() => setIsSettingsModalOpen(true)}
+            onViewChange={setCurrentView}
+            currentView={currentView}
+            onOpenMembers={() => setIsMembersModalOpen(true)}
+          />
+        )}
 
-        <main className="flex-1 overflow-y-auto bg-[#fafafa] dark:bg-gray-950 transition-colors duration-300">
+        <main className={`flex-1 overflow-y-auto bg-[#fafafa] dark:bg-gray-950 transition-colors duration-300 ${isMobile ? 'pt-16' : ''}`}>
+          <AdBanner />
+          
           {currentView === 'planner' ? (
-            <div className="max-w-4xl mx-auto px-8 py-12">
-              <header className="mb-12">
-                <div className="flex items-end justify-between mb-6">
+            <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 md:py-12">
+              <header className="mb-6 md:mb-12">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4 md:mb-6">
                   <div>
                     <p className="text-sm font-black text-blue-500 uppercase tracking-[0.2em] mb-1">
                       {format(selectedDate, "EEEE", { locale: ptBR })}
                     </p>
-                    <h2 className="text-4xl font-black text-gray-800 dark:text-gray-100 tracking-tight transition-colors">
+                    <h2 className="text-2xl md:text-4xl font-black text-gray-800 dark:text-gray-100 tracking-tight transition-colors">
                       {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
                     </h2>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="relative group">
+                    <div className="relative group w-full md:w-auto">
                       <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                       <input
                         type="text"
-                        placeholder="Buscar tarefas..."
+                        placeholder="Buscar..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl pl-10 pr-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all w-64 text-gray-700 dark:text-gray-200"
+                        className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl pl-10 pr-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all w-full md:w-64 text-gray-700 dark:text-gray-200"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-6 transition-colors">
-                  <div className="flex-1">
+                <div className="bg-white dark:bg-gray-900 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col md:flex-row items-center gap-4 md:gap-6 transition-colors">
+                  <div className="flex-1 w-full">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Progresso do dia</span>
                       <span className="text-xs font-black text-blue-600">{stats.percentage}%</span>
@@ -241,8 +284,8 @@ function AppContent() {
                       />
                     </div>
                   </div>
-                  <div className="text-right border-l border-gray-100 dark:border-gray-800 pl-6 shrink-0 transition-colors">
-                    <p className="text-2xl font-black text-gray-800 dark:text-gray-100">{stats.completed}/{stats.total}</p>
+                  <div className="text-right border-l border-gray-100 dark:border-gray-800 md:pl-6 shrink-0 transition-colors">
+                    <p className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100">{stats.completed}/{stats.total}</p>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Concluídas</p>
                   </div>
                 </div>
@@ -256,7 +299,7 @@ function AppContent() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.3 }}
-                    className="space-y-10"
+                    className="space-y-8 md:space-y-10"
                   >
                     {filteredTasks.filter(t => t.isDelivery).length > 0 && (
                       <div>
@@ -343,21 +386,21 @@ function AppContent() {
                   </Motion.div>
                 </AnimatePresence>
               ) : (
-                <div className="flex flex-col items-center justify-center py-20 text-center animate-in zoom-in-95 duration-500">
-                  <div className="relative mb-8">
+                <div className="flex flex-col items-center justify-center py-16 md:py-20 text-center animate-in zoom-in-95 duration-500">
+                  <div className="relative mb-6 md:mb-8 px-4">
                     <div className="absolute inset-0 bg-blue-100 rounded-full blur-3xl opacity-30 animate-pulse" />
-                    <div className="relative w-64 h-64 rounded-3xl overflow-hidden shadow-2xl rotate-3">
+                    <div className="relative w-48 md:w-64 h-48 md:h-64 rounded-3xl overflow-hidden shadow-2xl rotate-3 mx-auto">
                       <ImageWithFallback 
                         src="https://images.unsplash.com/photo-1551042710-de601b4dcdc3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd29ya3NwYWNlJTIwYWdlbmRhJTIwbm90ZWJvb2t8ZW58MXx8fHwxNzcxNjA5OTg0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
                         alt="Empty agenda"
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="absolute -bottom-4 -right-4 bg-white p-4 rounded-2xl shadow-xl">
-                      <CalendarCheck2 size={32} className="text-blue-600" />
+                    <div className="absolute -bottom-4 -right-4 bg-white p-3 md:p-4 rounded-2xl shadow-xl">
+                      <CalendarCheck2 size={28} className="text-blue-600" />
                     </div>
                   </div>
-                  <h3 className="text-2xl font-black text-gray-800 mb-2">Seu dia está livre!</h3>
+                  <h3 className="text-xl md:text-2xl font-black text-gray-800 mb-2">Seu dia está livre!</h3>
                   <p className="text-gray-400 font-medium max-w-xs mx-auto">
                     {searchQuery 
                       ? "Não encontramos tarefas com esse termo." 
@@ -367,7 +410,7 @@ function AppContent() {
                   {!searchQuery && (
                     <button 
                       onClick={() => setIsModalOpen(true)}
-                      className="mt-8 text-blue-600 font-black flex items-center gap-2 hover:gap-3 transition-all"
+                      className="mt-6 md:mt-8 text-blue-600 font-black flex items-center gap-2 hover:gap-3 transition-all min-h-[44px] px-4"
                     >
                       Criar primeira tarefa <ListTodo size={18} />
                     </button>
@@ -422,8 +465,6 @@ function AppContent() {
         )}
 
         <LocalModeBanner />
-        
-        <AdBanner />
       </div>
     </div>
   );
