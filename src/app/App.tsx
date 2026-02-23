@@ -17,6 +17,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import { MembersModal } from './components/MembersModal';
 import { AuthProvider } from './components/AuthProvider';
 import { LocalModeBanner } from './components/LocalModeBanner';
+import { AdBanner } from './components/AdBanner';
 
 const INITIAL_CATEGORIES: Category[] = [
   { id: '1', name: 'Trabalho', color: 'bg-blue-500 text-white' },
@@ -100,7 +101,10 @@ function AppContent() {
       completed: false,
       categoryId: newTask.categoryId,
       isDelivery: newTask.isDelivery,
-      deliveryDate: newTask.deliveryDate
+      deliveryDate: newTask.deliveryDate,
+      assignedToId: '',
+      createdById: '',
+      workspaceId: ''
     };
     setTasks(prev => [...prev, task]);
     toast.success(newTask.isDelivery ? 'Entrega criada!' : 'Tarefa adicionada!');
@@ -254,8 +258,6 @@ function AppContent() {
                     transition={{ duration: 0.3 }}
                     className="space-y-10"
                   >
-                    {/* Premium Banner removido - sem monetização */}
-
                     {filteredTasks.filter(t => t.isDelivery).length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-4 px-2">
@@ -420,6 +422,8 @@ function AppContent() {
         )}
 
         <LocalModeBanner />
+        
+        <AdBanner />
       </div>
     </div>
   );
