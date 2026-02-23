@@ -77,12 +77,12 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-2 md:p-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
-          <div className="p-8 pb-4">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight">
+          <div className="p-4 md:p-8 pb-4">
+            <div className="flex items-center justify-between mb-4 md:mb-8">
+              <h2 className="text-lg md:text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight">
                 {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
               </h2>
               <button 
@@ -147,12 +147,12 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="grid grid-cols-3 gap-2 md:flex">
                 <button
                   type="button"
                   onClick={() => setTaskType('unique')}
                   className={cn(
-                    "flex-1 flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all",
+                    "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
                     taskType === 'unique' 
                       ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-500 text-blue-600" 
                       : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
@@ -169,7 +169,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                   type="button"
                   onClick={() => setTaskType('permanent')}
                   className={cn(
-                    "flex-1 flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all",
+                    "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
                     taskType === 'permanent' 
                       ? "bg-orange-50/50 dark:bg-orange-950/20 border-orange-500 text-orange-600" 
                       : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
@@ -186,7 +186,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                   type="button"
                   onClick={() => setTaskType('delivery')}
                   className={cn(
-                    "flex-1 flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all",
+                    "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
                     taskType === 'delivery' 
                       ? "bg-green-50/50 dark:bg-green-950/20 border-green-500 text-green-600" 
                       : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
@@ -223,11 +223,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
             </div>
           </div>
 
-          <div className="p-8 pt-4">
+          <div className="p-4 md:p-8 pt-4">
             <button
               type="submit"
               disabled={!text.trim()}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-98 flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-98 flex items-center justify-center gap-2"
             >
               {editingTask ? (
                 <><Save size={20} strokeWidth={3} /> SALVAR ALTERAÇÕES</>

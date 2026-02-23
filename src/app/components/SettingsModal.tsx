@@ -15,11 +15,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 transition-colors">
-        <div className="p-8 pb-4">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight flex items-center gap-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-2 md:p-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 transition-colors max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-8 pb-4">
+          <div className="flex items-center justify-between mb-4 md:mb-8">
+            <h2 className="text-lg md:text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight flex items-center gap-2">
               <SettingsIcon size={24} className="text-blue-600" /> Configurações
             </h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
@@ -80,10 +80,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
           </div>
         </div>
 
-        <div className="p-8 pt-4">
+        <div className="p-4 md:p-8 pt-4">
           <button
             onClick={onClose}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-blue-100 dark:shadow-none"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all shadow-xl shadow-blue-100 dark:shadow-none"
           >
             SALVAR E VOLTAR
           </button>

@@ -191,44 +191,51 @@ function AppContent() {
       <Toaster position="top-right" />
       
       <div className="flex h-full w-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        {/* Sidebar - Desktop: sempre visível | Mobile: via Sheet */}
         {isMobile ? (
-          <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-            <SheetTrigger asChild>
-              <button className="fixed top-4 left-4 z-50 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <Menu size={24} />
-              </button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-80 p-0 bg-white dark:bg-gray-950">
-              <Sidebar 
-                selectedDate={selectedDate} 
-                onDateChange={(date) => {
-                  setSelectedDate(date);
-                  setIsSidebarOpen(false);
-                }} 
-                onAddTask={() => {
-                  setIsModalOpen(true);
-                  setIsSidebarOpen(false);
-                }}
-                onOpenCategories={() => {
-                  setIsCategoryModalOpen(true);
-                  setIsSidebarOpen(false);
-                }}
-                onOpenSettings={() => {
-                  setIsSettingsModalOpen(true);
-                  setIsSidebarOpen(false);
-                }}
-                onViewChange={(view) => {
-                  setCurrentView(view);
-                  setIsSidebarOpen(false);
-                }}
-                currentView={currentView}
-                onOpenMembers={() => {
-                  setIsMembersModalOpen(true);
-                  setIsSidebarOpen(false);
-                }}
-              />
-            </SheetContent>
-          </Sheet>
+          <>
+            {/* Botão do menu hamburguer - só visível em mobile */}
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="fixed top-4 left-4 z-50 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            >
+              <Menu size={24} />
+            </button>
+            
+            {/* Sheet - Sidebar em mobile */}
+            <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+              <SheetContent side="left" className="w-80 p-0 bg-white dark:bg-gray-950">
+                <Sidebar 
+                  selectedDate={selectedDate} 
+                  onDateChange={(date) => {
+                    setSelectedDate(date);
+                    setIsSidebarOpen(false);
+                  }} 
+                  onAddTask={() => {
+                    setIsModalOpen(true);
+                    setIsSidebarOpen(false);
+                  }}
+                  onOpenCategories={() => {
+                    setIsCategoryModalOpen(true);
+                    setIsSidebarOpen(false);
+                  }}
+                  onOpenSettings={() => {
+                    setIsSettingsModalOpen(true);
+                    setIsSidebarOpen(false);
+                  }}
+                  onViewChange={(view) => {
+                    setCurrentView(view);
+                    setIsSidebarOpen(false);
+                  }}
+                  currentView={currentView}
+                  onOpenMembers={() => {
+                    setIsMembersModalOpen(true);
+                    setIsSidebarOpen(false);
+                  }}
+                />
+              </SheetContent>
+            </Sheet>
+          </>
         ) : (
           <Sidebar 
             selectedDate={selectedDate} 

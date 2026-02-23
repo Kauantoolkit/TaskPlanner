@@ -27,11 +27,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onAddTask
 }) => {
   const [calendarMonth, setCalendarMonth] = useState<Date>(selectedDate);
+  const [activeSection, setActiveSection] = useState<'calendar' | 'tasks'>('calendar');
 
   // Sincroniza o mês do calendário quando a data selecionada muda via Sidebar
   React.useEffect(() => {
     setCalendarMonth(selectedDate);
   }, [selectedDate]);
+
+  // Função para alternar seção em mobile
+  const toggleSection = (section: 'calendar' | 'tasks') => {
+    setActiveSection(section);
+  };
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
@@ -71,20 +77,44 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="flex h-full animate-in fade-in duration-500">
+    <div className="flex flex-col md:flex-row h-full animate-in fade-in duration-500">
+      {/* Botões de navegação mobile */}
+      <div className="flex md:hidden border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <button
+          onClick={() => toggleSection('calendar')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold transition-colors ${
+            activeSection === 'calendar' 
+              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-950/20' 
+              : 'text-gray-400'
+          }`}
+        >
+          <CalendarIcon size={18} /> Calendário
+        </button>
+        <button
+          onClick={() => toggleSection('tasks')}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold transition-colors ${
+            activeSection === 'tasks' 
+              ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-950/20' 
+              : 'text-gray-400'
+          }`}
+        >
+          <ListTodo size={18} /> Tarefas
+        </button>
+      </div>
+
       {/* Lado Esquerdo: Calendário */}
-      <div className="w-[450px] border-r border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col p-8">
-        <header className="mb-8">
-          <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3 tracking-tight">
-            <CalendarIcon className="text-blue-600" size={28} /> Calendário
+      <div className={`w-full md:w-[450px] border-r border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col p-4 md:p-8 ${activeSection === 'tasks' ? 'hidden md:flex' : 'flex'}`}>
+        <header className="mb-4 md:mb-8">
+          <h2 className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2 md:gap-3 tracking-tight">
+            <CalendarIcon className="text-blue-600" size={24} /> Calendário
           </h2>
-          <p className="text-gray-400 font-medium text-sm mt-1">Navegue pelas suas datas e compromissos</p>
+          <p className="text-gray-400 font-medium text-sm mt-1 hidden md:block">Navegue pelas suas datas e compromissos</p>
         </header>
 
         <div className="flex-1 flex flex-col items-center">
           <style>{`
             .rdp {
-              --rdp-cell-size: 54px;
+              --rdp-cell-size: 44px;
               --rdp-accent-color: #2563eb;
               --rdp-background-color: #eff6ff;
               margin: 0;
@@ -159,14 +189,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Lado Direito: Tarefas do Dia Selecionado */}
-      <div className="flex-1 bg-[#fafafa] dark:bg-gray-950 flex flex-col">
-        <header className="p-8 border-b border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center justify-between">
+      <div className={`flex-1 bg-[#fafafa] dark:bg-gray-950 flex flex-col ${activeSection === 'calendar' ? 'hidden md:flex' : 'flex'}`}>
+        <header className="p-4 md:p-8 border-b border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mb-1">
                 {format(selectedDate, "EEEE", { locale: ptBR })}
               </p>
-              <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">
+              <h3 className="text-lg md:text-2xl font-black text-gray-800 dark:text-gray-100">
                 {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
               </h3>
             </div>
@@ -179,7 +209,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8">
           <AnimatePresence mode="popLayout">
             {dayTasks.length > 0 ? (
               <Motion.div 
@@ -267,10 +297,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 0.6, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="flex flex-col items-center justify-center h-full text-center py-20"
+                className="flex flex-col items-center justify-center h-full text-center py-12 md:py-20"
               >
-                <div className="w-20 h-20 bg-gray-100 dark:bg-gray-900 rounded-3xl flex items-center justify-center mb-6">
-                  <ListTodo size={40} className="text-gray-300" />
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-100 dark:bg-gray-900 rounded-2xl md:rounded-3xl flex items-center justify-center mb-4 md:mb-6">
+                  <ListTodo size={32} className="text-gray-300 md:hidden" />
+                  <ListTodo size={40} className="text-gray-300 hidden md:block" />
                 </div>
                 <p className="text-lg font-bold text-gray-400">Nenhuma tarefa para este dia.</p>
                 <button 

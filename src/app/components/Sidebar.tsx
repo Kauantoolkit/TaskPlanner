@@ -57,9 +57,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="w-80 h-screen bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col shrink-0 transition-colors">
-      <div className="p-8 pb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
-          <ListTodo size={28} strokeWidth={3} /> Planner
+      <div className="p-4 md:p-8 pb-4 flex items-center justify-between">
+        <h1 className="text-xl md:text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
+          <ListTodo size={24} className="md:w-7" strokeWidth={3} /> <span className="hidden md:inline">Planner</span>
         </h1>
         <button 
           onClick={() => onDateChange(new Date())}
@@ -69,37 +69,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8">
+      <div className="flex-1 overflow-y-auto px-3 md:px-6 py-2 md:py-4 space-y-6 md:space-y-8">
         <section>
-          <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500 mb-4 px-2">Navegação</h2>
+          <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500 mb-3 md:mb-4 px-2">Navegação</h2>
           <div className="space-y-1">
             <button 
               onClick={() => onViewChange('planner')}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 font-bold rounded-xl transition-colors whitespace-nowrap",
+                "w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 font-bold rounded-xl transition-colors whitespace-nowrap",
                 currentView === 'planner' 
                   ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400" 
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
               )}
             >
-              <LayoutDashboard size={18} className={currentView === 'planner' ? "text-blue-600" : "text-gray-400"} /> Planner Diário
+              <LayoutDashboard size={18} className={currentView === 'planner' ? "text-blue-600" : "text-gray-400"} /> <span className="text-sm md:text-base">Planner Diário</span>
             </button>
             <button 
               onClick={() => onViewChange('calendar')}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 font-bold rounded-xl transition-colors whitespace-nowrap",
+                "w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 font-bold rounded-xl transition-colors whitespace-nowrap",
                 currentView === 'calendar' 
                   ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400" 
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
               )}
             >
-              <CalendarIcon size={18} className={currentView === 'calendar' ? "text-blue-600" : "text-gray-400"} /> Calendário Completo
+              <CalendarIcon size={18} className={currentView === 'calendar' ? "text-blue-600" : "text-gray-400"} /> <span className="text-sm md:text-base">Calendário</span>
             </button>
           </div>
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-4 px-2">
+          <div className="flex items-center justify-between mb-3 md:mb-4 px-2">
             <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500">Próximos Dias</h2>
             <div className="flex gap-1">
               <button 
@@ -143,13 +143,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex flex-col items-start">
                         <span className={cn(
-                          "text-xs uppercase tracking-widest font-black",
+                          "text-[9px] md:text-xs uppercase tracking-widest font-black",
                           isActive ? "text-blue-200" : (isToday ? "text-blue-500" : "text-gray-400 dark:text-gray-600 group-hover:text-blue-400")
                         )}>
-                          {format(date, 'EEEE', { locale: ptBR })}
+                          {format(date, 'EEE', { locale: ptBR })}
                         </span>
                         <span className={cn(
-                          "text-base font-bold",
+                          "text-sm md:text-base font-bold",
                           isActive ? "text-white" : "text-gray-700 dark:text-gray-300"
                         )}>
                           {format(date, 'dd MMM', { locale: ptBR })}
@@ -165,45 +165,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </section>
 
         <section>
-          <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500 mb-4 px-2">Configuração</h2>
+          <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500 mb-3 md:mb-4 px-2">Configuração</h2>
           <div className="space-y-1">
             <button 
               onClick={onOpenCategories}
-              className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
+              className="w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
             >
-              <Layers size={18} className="text-gray-400" /> Categorias
+              <Layers size={18} className="text-gray-400" /> <span className="text-sm md:text-base">Categorias</span>
             </button>
             <button 
               onClick={onOpenSettings}
-              className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
+              className="w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
             >
-              <Settings size={18} className="text-gray-400" /> Configurações
+              <Settings size={18} className="text-gray-400" /> <span className="text-sm md:text-base">Configurações</span>
             </button>
             {onOpenMembers && (
               <button 
                 onClick={onOpenMembers}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
+                className="w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-900 rounded-xl transition-colors whitespace-nowrap"
               >
-                <Users size={18} className="text-gray-400" /> Membros
+                <Users size={18} className="text-gray-400" /> <span className="text-sm md:text-base">Membros</span>
               </button>
             )}
           </div>
         </section>
       </div>
 
-      <div className="p-6 pt-2 space-y-2">
+      <div className="p-3 md:p-6 pt-2 space-y-2">
         <button 
           onClick={onAddTask}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl transition-all active:scale-98"
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all active:scale-98"
         >
-          <PlusCircle size={20} /> NOVA TAREFA
+          <PlusCircle size={18} className="md:w-5" /> <span className="text-sm md:text-base">NOVA TAREFA</span>
         </button>
 
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black py-4 rounded-2xl transition-all active:scale-98"
+          className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all active:scale-98"
         >
-          <LogOut size={20} /> SAIR
+          <LogOut size={18} className="md:w-5" /> <span className="text-sm md:text-base">SAIR</span>
         </button>
       </div>
     </aside>

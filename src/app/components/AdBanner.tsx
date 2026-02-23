@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function AdBanner() {
   const bannerRef = useRef<HTMLModElement>(null);
-  const [adsLoaded, setAdsLoaded] = useState(false);
 
   useEffect(() => {
-    // Check if AdSense script is loaded
-    const checkAdSense = () => {
-      if (window.adsbygoogle) {
-        setAdsLoaded(true);
+    // Verifica se o AdSense já está carregado e insere o anúncio
+    const pushAd = () => {
+      if (window.adsbygoogle && bannerRef.current) {
         try {
           (window.adsbygoogle as unknown as { push: (params: object) => void }).push({});
         } catch (e) {
@@ -17,37 +15,25 @@ export function AdBanner() {
       }
     };
 
-    // Try immediately
-    checkAdSense();
-    
-    // Also try after a short delay in case script is still loading
-    const timer = setTimeout(checkAdSense, 1000);
-    
+    // Tenta imediatamente
+    pushAd();
+
+    // Também tenta após um curto intervalo caso o script ainda esteja carregando
+    const timer = setTimeout(pushAd, 1500);
+
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <div style={{ width: '100%', padding: '12px 8px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
-      {/* Placeholder sempre visível */}
-      <div style={{ 
-        backgroundColor: '#f3f4f6', 
-        textAlign: 'center', 
-        padding: '12px 16px', 
-        borderRadius: '8px',
-        border: '2px dashed #9ca3af',
-        marginBottom: '8px'
-      }}>
-        <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'bold' }}>Espaço para anúncio (teste)</span>
-      </div>
-      
+    <div className="w-full p-2 md:p-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
       {/* Código do AdSense */}
       <ins
         ref={bannerRef}
         className="adsbygoogle"
-        style={{ display: 'block', textAlign: 'center', minHeight: '90px' }}
+        style={{ display: 'block', textAlign: 'center', minHeight: '50px' }}
         data-ad-client="ca-pub-8759057006374144"
-        data-ad-slot="1234567890"
-        data-ad-format="horizontal"
+        data-ad-slot="9126701774"
+        data-ad-format="auto"
         data-full-width-responsive="true"
       />
     </div>

@@ -33,17 +33,17 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ categories, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 transition-colors">
-        <div className="p-8 pb-4">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight">Categorias</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-2 md:p-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 transition-colors max-h-[90vh] overflow-y-auto">
+        <div className="p-4 md:p-8 pb-4">
+          <div className="flex items-center justify-between mb-4 md:mb-8">
+            <h2 className="text-lg md:text-xl font-black text-gray-800 dark:text-gray-100 tracking-tight">Categorias</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
               <X size={20} className="text-gray-400" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="mb-8 space-y-4">
+          <form onSubmit={handleSubmit} className="mb-6 md:mb-8 space-y-4">
             <div>
               <label className="text-xs uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 mb-2 block px-1">Nova Categoria</label>
               <div className="flex gap-2">
@@ -57,7 +57,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ categories, onClos
                 <button
                   type="submit"
                   disabled={!name.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white p-3 rounded-xl transition-all shadow-lg shadow-blue-100 dark:shadow-none"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white p-3 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl transition-all shadow-lg shadow-blue-100 dark:shadow-none"
                 >
                   <Plus size={20} />
                 </button>
@@ -102,10 +102,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ categories, onClos
             )}
           </div>
         </div>
-        <div className="p-8 pt-4">
+        <div className="p-4 md:p-8 pt-4">
           <button
             onClick={onClose}
-            className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-4 rounded-2xl transition-all"
+            className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all"
           >
             FECHAR
           </button>

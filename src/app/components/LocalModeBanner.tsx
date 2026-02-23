@@ -17,19 +17,20 @@ export function LocalModeBanner() {
   };
 
   return (
-    <div className="bg-blue-50 dark:bg-blue-950/30 border-b border-blue-100 dark:border-blue-900/50 px-4 py-2">
-      <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Info size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />
-          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-            <span className="font-black">Modo Local:</span> Seus dados estão salvos apenas neste navegador. 
+    <div className="bg-blue-50 dark:bg-blue-950/30 border-b border-blue-100 dark:border-blue-900/50 px-2 md:px-4 py-2">
+      <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 md:gap-4">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Info size={16} className="text-blue-600 dark:text-blue-400 shrink-0 md:w-[18px]" />
+          <p className="text-xs md:text-sm font-medium text-blue-800 dark:text-blue-200">
+            <span className="font-black">Modo Local:</span> 
+            <span className="hidden md:inline"> Seus dados estão salvos apenas neste navegador.</span>
             <a 
               href="/AUTENTICACAO_SUPABASE.md" 
               target="_blank"
               className="underline ml-1 hover:text-blue-600"
             >
-              Configure autenticação
-            </a> para sincronizar entre dispositivos.
+              Configure
+            </a>
           </p>
         </div>
         <button
@@ -37,7 +38,7 @@ export function LocalModeBanner() {
           className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors shrink-0"
           title="Dispensar"
         >
-          <X size={18} />
+          <X size={16} className="md:w-[18px]" />
         </button>
       </div>
     </div>

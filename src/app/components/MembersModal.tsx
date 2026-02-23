@@ -31,43 +31,43 @@ export function MembersModal({ onClose }: MembersModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 md:p-4">
       <Motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-gray-100 dark:border-gray-800"
+        className="bg-white dark:bg-gray-900 rounded-2xl md:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 dark:border-gray-800"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 relative">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 md:p-6 relative">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-all"
+            className="absolute top-3 right-3 md:top-4 md:right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition-all"
           >
-            <X size={20} className="text-white" />
+            <X size={18} className="text-white md:w-5" />
           </button>
           
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur">
-              <Users size={28} className="text-white" strokeWidth={2.5} />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="w-10 h-10 md:w-14 md:h-14 bg-white/20 rounded-xl md:rounded-2xl flex items-center justify-center backdrop-blur">
+              <Users size={22} className="text-white md:w-7 md:h-7" strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-white">
+              <h2 className="text-xl md:text-2xl font-black text-white">
                 Membros
               </h2>
-              <p className="text-white/80 text-sm font-bold">
+              <p className="text-white/80 text-xs md:text-sm font-bold">
                 {currentWorkspace?.name}
               </p>
             </div>
           </div>
 
           {/* Contador de Membros */}
-          <div className="mt-4 bg-white/10 backdrop-blur rounded-xl p-3">
+          <div className="mt-3 md:mt-4 bg-white/10 backdrop-blur rounded-lg md:rounded-xl p-2 md:p-3">
             <div className="flex items-center justify-between">
-              <span className="text-white/90 text-sm font-bold">
+              <span className="text-white/90 text-xs md:text-sm font-bold">
                 {members.length} {members.length === 1 ? 'membro' : 'membros'}
               </span>
-              <span className="text-white/70 text-xs font-bold">
+              <span className="text-white/70 text-[10px] md:text-xs font-bold">
                 Membros ilimitados
               </span>
             </div>
@@ -75,7 +75,7 @@ export function MembersModal({ onClose }: MembersModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(85vh-200px)]">
+        <div className="p-3 md:p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
           {/* Lista de Membros */}
           <div className="space-y-3 mb-6">
             <AnimatePresence mode="popLayout">
