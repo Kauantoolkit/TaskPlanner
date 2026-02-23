@@ -1,0 +1,426 @@
+import React, { useState, useMemo } from 'react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Search, CalendarCheck2, ListTodo } from 'lucide-react';
+import { Sidebar } from './components/Sidebar';
+import { TaskItem } from './components/TaskItem';
+import { AddTaskModal } from './components/AddTaskModal';
+import { CategoryModal } from './components/CategoryModal';
+import { SettingsModal } from './components/SettingsModal';
+import { CalendarView } from './components/CalendarView';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { Toaster, toast } from 'sonner';
+import { ImageWithFallback } from './components/figma/ImageWithFallback';
+import { Task, Category, Settings } from './types';
+import { motion as Motion, AnimatePresence } from 'motion/react';
+import { WorkspaceProvider } from './context/WorkspaceContext';
+import { MembersModal } from './components/MembersModal';
+import { AuthProvider } from './components/AuthProvider';
+import { LocalModeBanner } from './components/LocalModeBanner';
+
+const INITIAL_CATEGORIES: Category[] = [
+  { id: '1', name: 'Trabalho', color: 'bg-blue-500 text-white' },
+  { id: '2', name: 'Pessoal', color: 'bg-emerald-500 text-white' },
+  { id: '3', name: 'Saúde', color: 'bg-rose-500 text-white' },
+];
+
+const INITIAL_SETTINGS: Settings = {
+  darkMode: false,
+  showCompleted: true,
+  confirmDelete: true,
+};
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <WorkspaceProvider>
+        <AppContent />
+      </WorkspaceProvider>
+    </AuthProvider>
+  );
+}
+
+function AppContent() {
+  const [tasks, setTasks] = useLocalStorage<Task[]>('agenda-tasks', []);
+  const [categories, setCategories] = useLocalStorage<Category[]>('agenda-categories', INITIAL_CATEGORIES);
+  const [settings, setSettings] = useLocalStorage<Settings>('agenda-settings', INITIAL_SETTINGS);
+  
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentView, setCurrentView] = useState<'planner' | 'calendar'>('planner');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
+
+  const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      // Permanent tasks always show
+      if (task.isPermanent) return true;
+      
+      // Delivery tasks show from today until delivery date
+      if (task.isDelivery && task.deliveryDate) {
+        return formattedSelectedDate <= task.deliveryDate;
+      }
+      
+      // Regular tasks show only on their date
+      return task.date === formattedSelectedDate;
+    });
+  }, [tasks, formattedSelectedDate, searchQuery]);
+
+  const stats = useMemo(() => {
+    const dailyTasks = filteredTasks;
+    const completedCount = dailyTasks.filter(task => {
+      if (task.isPermanent) {
+        return task.completedDates.includes(formattedSelectedDate);
+      }
+      return task.completed;
+    }).length;
+
+    return {
+      total: dailyTasks.length,
+      completed: completedCount,
+      percentage: dailyTasks.length > 0 ? Math.round((completedCount / dailyTasks.length) * 100) : 0
+    };
+  }, [filteredTasks, formattedSelectedDate]);
+
+  const handleAddTask = (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+    const task: Task = {
+      id: crypto.randomUUID(),
+      text: newTask.text,
+      isPermanent: newTask.isPermanent,
+      completedDates: [],
+      date: newTask.isPermanent || newTask.isDelivery ? undefined : newTask.date,
+      completed: false,
+      categoryId: newTask.categoryId,
+      isDelivery: newTask.isDelivery,
+      deliveryDate: newTask.deliveryDate
+    };
+    setTasks(prev => [...prev, task]);
+    toast.success(newTask.isDelivery ? 'Entrega criada!' : 'Tarefa adicionada!');
+  };
+
+  const handleToggleTask = (id: string, customDate?: string) => {
+    const targetDate = customDate || formattedSelectedDate;
+    setTasks(prev => prev.map(task => {
+      if (task.id !== id) return task;
+
+      if (task.isPermanent) {
+        const isCompleted = task.completedDates.includes(targetDate);
+        const newCompletedDates = isCompleted
+          ? task.completedDates.filter(d => d !== targetDate)
+          : [...task.completedDates, targetDate];
+        return { ...task, completedDates: newCompletedDates };
+      }
+
+      return { ...task, completed: !task.completed };
+    }));
+  };
+
+  const handleDeleteTask = (id: string) => {
+    if (settings.confirmDelete) {
+      if (!confirm('Deseja excluir esta tarefa?')) return;
+    }
+    setTasks(prev => prev.filter(task => task.id !== id));
+    toast.info('Tarefa removida');
+  };
+
+  const handleAddCategory = (name: string, color: string) => {
+    const newCat: Category = { id: crypto.randomUUID(), name, color };
+    setCategories(prev => [...prev, newCat]);
+    toast.success('Categoria criada!');
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+    setTasks(prev => prev.map(t => t.categoryId === id ? { ...t, categoryId: undefined } : t));
+    toast.info('Categoria removida');
+  };
+
+  const handleClearAll = () => {
+    setTasks([]);
+    setCategories(INITIAL_CATEGORIES);
+    setSettings(INITIAL_SETTINGS);
+    setIsSettingsModalOpen(false);
+    toast.success('Todos os dados foram limpos.');
+  };
+
+  const handleEditTask = (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      setEditingTask(task);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleUpdateTask = (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+    setTasks(prev => prev.map(task => {
+      if (task.id !== id) return task;
+      
+      return {
+        ...task,
+        text: updatedData.text,
+        isPermanent: updatedData.isPermanent,
+        date: updatedData.isPermanent || updatedData.isDelivery ? undefined : updatedData.date,
+        categoryId: updatedData.categoryId,
+        isDelivery: updatedData.isDelivery,
+        deliveryDate: updatedData.deliveryDate
+      };
+    }));
+    toast.success('Tarefa atualizada!');
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingTask(undefined);
+  };
+
+  return (
+    <div className={`flex h-screen bg-[#fafafa] text-gray-900 font-sans selection:bg-blue-100 ${settings.darkMode ? 'dark' : ''}`}>
+      <Toaster position="top-right" />
+      
+      <div className="flex h-full w-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+        <Sidebar 
+          selectedDate={selectedDate} 
+          onDateChange={setSelectedDate} 
+          onAddTask={() => setIsModalOpen(true)}
+          onOpenCategories={() => setIsCategoryModalOpen(true)}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onViewChange={setCurrentView}
+          currentView={currentView}
+          onOpenMembers={() => setIsMembersModalOpen(true)}
+        />
+
+        <main className="flex-1 overflow-y-auto bg-[#fafafa] dark:bg-gray-950 transition-colors duration-300">
+          {currentView === 'planner' ? (
+            <div className="max-w-4xl mx-auto px-8 py-12">
+              <header className="mb-12">
+                <div className="flex items-end justify-between mb-6">
+                  <div>
+                    <p className="text-sm font-black text-blue-500 uppercase tracking-[0.2em] mb-1">
+                      {format(selectedDate, "EEEE", { locale: ptBR })}
+                    </p>
+                    <h2 className="text-4xl font-black text-gray-800 dark:text-gray-100 tracking-tight transition-colors">
+                      {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="relative group">
+                      <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                      <input
+                        type="text"
+                        placeholder="Buscar tarefas..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl pl-10 pr-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all w-64 text-gray-700 dark:text-gray-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm flex items-center gap-6 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-gray-400 uppercase tracking-widest">Progresso do dia</span>
+                      <span className="text-xs font-black text-blue-600">{stats.percentage}%</span>
+                    </div>
+                    <div className="h-3 w-full bg-gray-50 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-100 dark:border-gray-700 transition-colors">
+                      <div 
+                        className="h-full bg-blue-600 rounded-full transition-all duration-700 ease-out" 
+                        style={{ width: `${stats.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right border-l border-gray-100 dark:border-gray-800 pl-6 shrink-0 transition-colors">
+                    <p className="text-2xl font-black text-gray-800 dark:text-gray-100">{stats.completed}/{stats.total}</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Concluídas</p>
+                  </div>
+                </div>
+              </header>
+
+              {filteredTasks.length > 0 ? (
+                <AnimatePresence mode="popLayout">
+                  <Motion.div 
+                    key={formattedSelectedDate}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-10"
+                  >
+                    {/* Premium Banner removido - sem monetização */}
+
+                    {filteredTasks.filter(t => t.isDelivery).length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4 px-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                          <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Entregas Pendentes</h3>
+                        </div>
+                        <div className="grid gap-3">
+                          {filteredTasks
+                            .filter(t => t.isDelivery)
+                            .map(task => (
+                              <TaskItem
+                                key={task.id}
+                                task={{
+                                  ...task,
+                                  completed: !!task.completed
+                                }}
+                                category={categories.find(c => c.id === task.categoryId)}
+                                onToggle={handleToggleTask}
+                                onDelete={handleDeleteTask}
+                                onEdit={handleEditTask}
+                                selectedDate={formattedSelectedDate}
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-4 px-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Rotina Permanente</h3>
+                      </div>
+                      <div className="grid gap-3">
+                        {filteredTasks.filter(t => t.isPermanent).length > 0 ? (
+                          filteredTasks
+                            .filter(t => t.isPermanent)
+                            .map(task => (
+                              <TaskItem
+                                key={task.id}
+                                task={{
+                                  ...task,
+                                  completed: task.completedDates.includes(formattedSelectedDate)
+                                }}
+                                category={categories.find(c => c.id === task.categoryId)}
+                                onToggle={handleToggleTask}
+                                onDelete={handleDeleteTask}
+                                onEdit={handleEditTask}
+                              />
+                            ))
+                        ) : (
+                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma rotina para exibir.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-4 px-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Tarefas do Dia</h3>
+                      </div>
+                      <div className="grid gap-3">
+                        {filteredTasks.filter(t => !t.isPermanent && !t.isDelivery).length > 0 ? (
+                          filteredTasks
+                            .filter(t => !t.isPermanent && !t.isDelivery)
+                            .map(task => (
+                              <TaskItem
+                                key={task.id}
+                                task={{
+                                  ...task,
+                                  completed: !!task.completed
+                                }}
+                                category={categories.find(c => c.id === task.categoryId)}
+                                onToggle={handleToggleTask}
+                                onDelete={handleDeleteTask}
+                                onEdit={handleEditTask}
+                              />
+                            ))
+                        ) : (
+                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa específica hoje.</p>
+                        )}
+                      </div>
+                    </div>
+                  </Motion.div>
+                </AnimatePresence>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-center animate-in zoom-in-95 duration-500">
+                  <div className="relative mb-8">
+                    <div className="absolute inset-0 bg-blue-100 rounded-full blur-3xl opacity-30 animate-pulse" />
+                    <div className="relative w-64 h-64 rounded-3xl overflow-hidden shadow-2xl rotate-3">
+                      <ImageWithFallback 
+                        src="https://images.unsplash.com/photo-1551042710-de601b4dcdc3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd29ya3NwYWNlJTIwYWdlbmRhJTIwbm90ZWJvb2t8ZW58MXx8fHwxNzcxNjA5OTg0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
+                        alt="Empty agenda"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="absolute -bottom-4 -right-4 bg-white p-4 rounded-2xl shadow-xl">
+                      <CalendarCheck2 size={32} className="text-blue-600" />
+                    </div>
+                  </div>
+                  <h3 className="text-2xl font-black text-gray-800 mb-2">Seu dia está livre!</h3>
+                  <p className="text-gray-400 font-medium max-w-xs mx-auto">
+                    {searchQuery 
+                      ? "Não encontramos tarefas com esse termo." 
+                      : "Aproveite para descansar ou adicione novas tarefas para se organizar."
+                    }
+                  </p>
+                  {!searchQuery && (
+                    <button 
+                      onClick={() => setIsModalOpen(true)}
+                      className="mt-8 text-blue-600 font-black flex items-center gap-2 hover:gap-3 transition-all"
+                    >
+                      Criar primeira tarefa <ListTodo size={18} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <CalendarView 
+              tasks={tasks}
+              categories={categories}
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+              onToggleTask={handleToggleTask}
+              onDeleteTask={handleDeleteTask}
+              onAddTask={() => setIsModalOpen(true)}
+            />
+          )}
+        </main>
+
+        {isModalOpen && (
+          <AddTaskModal
+            onClose={handleCloseModal}
+            onAdd={handleAddTask}
+            selectedDate={selectedDate}
+            categories={categories}
+            editingTask={editingTask}
+            onUpdate={handleUpdateTask}
+          />
+        )}
+
+        {isCategoryModalOpen && (
+          <CategoryModal
+            categories={categories}
+            onClose={() => setIsCategoryModalOpen(false)}
+            onAdd={handleAddCategory}
+            onDelete={handleDeleteCategory}
+          />
+        )}
+
+        {isSettingsModalOpen && (
+          <SettingsModal
+            settings={settings}
+            onUpdate={setSettings}
+            onClose={() => setIsSettingsModalOpen(false)}
+            onClearAll={handleClearAll}
+          />
+        )}
+
+        {isMembersModalOpen && (
+          <MembersModal onClose={() => setIsMembersModalOpen(false)} />
+        )}
+
+        <LocalModeBanner />
+      </div>
+    </div>
+  );
+}
