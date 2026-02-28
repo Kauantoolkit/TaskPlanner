@@ -27,8 +27,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
 
     try {
       if (isSignUp) {
-        console.log('🔐 Tentando criar conta para:', email);
-        
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -36,8 +34,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
             emailRedirectTo: window.location.origin,
           }
         });
-        
-        console.log('🔐 Resultado do signUp:', { data, error });
         
         if (error) throw error;
         
@@ -52,22 +48,16 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
           toast.success('✅ Conta criada e autenticado com sucesso!');
         }
       } else {
-        console.log('🔐 Tentando fazer login:', email);
-        
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        
-        console.log('🔐 Resultado do signIn:', { data, error });
         
         if (error) throw error;
         
         toast.success('✅ Login realizado com sucesso!');
       }
     } catch (error: any) {
-      console.error('❌ Erro de autenticação:', error);
-      
       // Mensagens de erro mais amigáveis
       let errorMessage = error.message || 'Erro ao autenticar';
       
@@ -137,7 +127,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
       });
       setShowForgotPassword(false);
     } catch (error: any) {
-      console.error('❌ Erro ao recuperar senha:', error);
       toast.error(error.message || 'Erro ao enviar email de recuperação');
     } finally {
       setLoading(false);

@@ -15,10 +15,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Preview mode para visualizar tela de login
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview-login') === 'true';
 
-  console.log('🔐 AuthProvider - isSupabaseConfigured:', isSupabaseConfigured);
-  console.log('🔐 AuthProvider - user:', user ? `✅ ${user.email}` : '❌ Não autenticado');
-  console.log('🔐 AuthProvider - loading:', loading);
-
   useEffect(() => {
     // Se Supabase não está configurado, pular autenticação
     if (!isSupabaseConfigured) {

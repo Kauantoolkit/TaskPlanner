@@ -16,7 +16,7 @@ const INITIAL_SETTINGS: Settings = {
 
 /**
  * Repository usando Supabase (PostgreSQL)
- * Sincroniza dados na nuvem, com autenticação e RLS
+ * Schema conforme SUPABASE_SETUP.md
  */
 export class SupabaseRepository implements IDataRepository {
   
@@ -26,11 +26,87 @@ export class SupabaseRepository implements IDataRepository {
     return user.id;
   }
 
+  /**
+   * Busca ou cria o workspace do usuário
+   * O primeiro login cria um workspace "Personal" automaticamente
+   */
+  private async getOrCreateUserWorkspace(): Promise<{ workspaceId: string; memberId: string }> {
+    const userId = await this.getUserId();
+    const userEmail = (await supabase.auth.getUser()).data.user?.email || '';
+
+    // Buscar workspaces do usuário
+    const { data: workspaces, error: wsError } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', userId)
+      .limit(1);
+
+    if (wsError) throw wsError;
+
+    let workspaceId: string;
+
+    if (workspaces && workspaces.length > 0) {
+      // Workspace já existe
+      workspaceId = workspaces[0].id;
+    } else {
+      // Criar workspace pessoal
+      const { data: newWorkspace, error: createError } = await supabase
+        .from('workspaces')
+        .insert({
+          name: 'Meu Workspace',
+          type: 'personal',
+          owner_id: userId,
+        })
+        .select('id')
+        .single();
+
+      if (createError) throw createError;
+      workspaceId = newWorkspace.id;
+    }
+
+    // Buscar ou criar membro
+    const { data: members, error: memError } = await supabase
+      .from('workspace_members')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (memError) throw memError;
+
+    let memberId: string;
+
+    if (members && members.length > 0) {
+      memberId = members[0].id;
+    } else {
+      // Criar membro
+      const { data: newMember, error: createMemError } = await supabase
+        .from('workspace_members')
+        .insert({
+          workspace_id: workspaceId,
+          user_id: userId,
+          role: 'owner',
+          name: userEmail.split('@')[0],
+          email: userEmail,
+        })
+        .select('id')
+        .single();
+
+      if (createMemError) throw createMemError;
+      memberId = newMember.id;
+    }
+
+    return { workspaceId, memberId };
+  }
+
   // ===== TASKS =====
   async getTasks(): Promise<Task[]> {
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
+
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
+      .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -43,33 +119,41 @@ export class SupabaseRepository implements IDataRepository {
       completedDates: row.completed_dates || [],
       date: row.date,
       completed: row.completed,
-      categoryId: row.category_id,
+      categoryId: row.category, // Banco usa 'category' como texto
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
+      assignedToId: row.assigned_to_id,
+      createdById: row.created_by_id,
+      workspaceId: row.workspace_id,
     }));
   }
 
   async createTask(task: Task): Promise<Task> {
-    const userId = await this.getUserId();
+    const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
 
     const { data, error } = await supabase
       .from('tasks')
       .insert({
         id: task.id,
+        workspace_id: workspaceId,
+        assigned_to_id: task.assignedToId || memberId,
+        created_by_id: memberId,
         text: task.text,
         is_permanent: task.isPermanent,
         completed_dates: task.completedDates,
-        date: task.date,
-        completed: task.completed,
-        category_id: task.categoryId,
-        is_delivery: task.isDelivery,
-        delivery_date: task.deliveryDate,
-        user_id: userId,
+        date: task.date || new Date().toISOString().split('T')[0],
+        completed: task.completed || false,
+        category: task.categoryId || null, // Banco usa 'category' como texto
+        is_delivery: task.isDelivery || false,
+        delivery_date: task.deliveryDate || null,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao criar task:', error);
+      throw error;
+    }
     return task;
   }
 
@@ -81,7 +165,7 @@ export class SupabaseRepository implements IDataRepository {
     if (updates.completedDates !== undefined) updateData.completed_dates = updates.completedDates;
     if (updates.date !== undefined) updateData.date = updates.date;
     if (updates.completed !== undefined) updateData.completed = updates.completed;
-    if (updates.categoryId !== undefined) updateData.category_id = updates.categoryId;
+    if (updates.categoryId !== undefined) updateData.category = updates.categoryId; // Banco usa 'category'
     if (updates.isDelivery !== undefined) updateData.is_delivery = updates.isDelivery;
     if (updates.deliveryDate !== undefined) updateData.delivery_date = updates.deliveryDate;
 
@@ -101,9 +185,12 @@ export class SupabaseRepository implements IDataRepository {
       completedDates: data.completed_dates || [],
       date: data.date,
       completed: data.completed,
-      categoryId: data.category_id,
+      categoryId: data.category,
       isDelivery: data.is_delivery,
       deliveryDate: data.delivery_date,
+      assignedToId: data.assigned_to_id,
+      createdById: data.created_by_id,
+      workspaceId: data.workspace_id,
     };
   }
 
@@ -118,25 +205,33 @@ export class SupabaseRepository implements IDataRepository {
 
   // ===== CATEGORIES =====
   async getCategories(): Promise<Category[]> {
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
+
     const { data, error } = await supabase
       .from('categories')
       .select('*')
+      .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
     
     // Se não tem categorias, cria as iniciais
     if (!data || data.length === 0) {
-      const userId = await this.getUserId();
+      const createdCategories: Category[] = [];
       for (const cat of INITIAL_CATEGORIES) {
-        await supabase.from('categories').insert({
-          id: cat.id,
-          name: cat.name,
-          color: cat.color,
-          user_id: userId,
-        });
+        try {
+          const created = await this.createCategory(cat);
+          createdCategories.push(created);
+        } catch (e: any) {
+          // Se der erro de uniqueness, a categoria já existe
+          if (e.code !== '23505') throw e;
+        }
       }
-      return INITIAL_CATEGORIES;
+      // Se não criou nenhuma, busca as que existem
+      if (createdCategories.length === 0) {
+        return this.getCategories();
+      }
+      return createdCategories;
     }
 
     return data.map(row => ({
@@ -147,15 +242,15 @@ export class SupabaseRepository implements IDataRepository {
   }
 
   async createCategory(category: Category): Promise<Category> {
-    const userId = await this.getUserId();
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
 
     const { error } = await supabase
       .from('categories')
       .insert({
         id: category.id,
+        workspace_id: workspaceId,
         name: category.name,
         color: category.color,
-        user_id: userId,
       });
 
     if (error) throw error;
@@ -163,6 +258,14 @@ export class SupabaseRepository implements IDataRepository {
   }
 
   async deleteCategory(id: string): Promise<void> {
+    const { data: category } = await supabase
+      .from('categories')
+      .select('name')
+      .eq('id', id)
+      .single();
+
+    const categoryName = category?.name;
+
     const { error } = await supabase
       .from('categories')
       .delete()
@@ -170,68 +273,89 @@ export class SupabaseRepository implements IDataRepository {
 
     if (error) throw error;
     
-    // Remove category from tasks (CASCADE já faz isso, mas vamos garantir)
-    await supabase
-      .from('tasks')
-      .update({ category_id: null })
-      .eq('category_id', id);
+    // Remove category from tasks (busca pelo nome pois banco usa 'category' como texto)
+    if (categoryName) {
+      await supabase
+        .from('tasks')
+        .update({ category: null })
+        .eq('category', categoryName);
+    }
   }
 
   // ===== SETTINGS =====
   async getSettings(): Promise<Settings> {
-    const userId = await this.getUserId();
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
 
-    const { data, error } = await supabase
-      .from('settings')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    // Buscar cada setting individualmente
+    const settingsKeys = ['darkMode', 'showCompleted', 'confirmDelete'];
+    const result: any = {};
 
-    // Se não encontrou, cria settings padrão
-    if (error && error.code === 'PGRST116') {
+    for (const key of settingsKeys) {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('workspace_id', workspaceId)
+        .eq('key', key)
+        .single();
+
+      if (!error && data) {
+        // O valor é armazenado como JSONB, ex: {"value": true}
+        result[key] = data.value?.value ?? data.value;
+      }
+    }
+
+    // Se não encontrou nenhuma, cria as padrão
+    const hasAnySetting = Object.keys(result).some(k => result[k] !== undefined);
+    if (!hasAnySetting) {
       await this.updateSettings(INITIAL_SETTINGS);
       return INITIAL_SETTINGS;
     }
 
-    if (error) throw error;
-    if (!data) return INITIAL_SETTINGS;
-
     return {
-      darkMode: data.dark_mode,
-      showCompleted: data.show_completed,
-      confirmDelete: data.confirm_delete,
+      darkMode: result.darkMode ?? INITIAL_SETTINGS.darkMode,
+      showCompleted: result.showCompleted ?? INITIAL_SETTINGS.showCompleted,
+      confirmDelete: result.confirmDelete ?? INITIAL_SETTINGS.confirmDelete,
     };
   }
 
   async updateSettings(settings: Settings): Promise<Settings> {
-    const userId = await this.getUserId();
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
 
-    const { error } = await supabase
-      .from('settings')
-      .upsert({
-        user_id: userId,
-        dark_mode: settings.darkMode,
-        show_completed: settings.showCompleted,
-        confirm_delete: settings.confirmDelete,
-        updated_at: new Date().toISOString(),
-      });
+    // Salvar cada setting como entrada separada com JSONB
+    const settingsToSave = [
+      { key: 'darkMode', value: settings.darkMode },
+      { key: 'showCompleted', value: settings.showCompleted },
+      { key: 'confirmDelete', value: settings.confirmDelete },
+    ];
 
-    if (error) throw error;
+    for (const { key, value } of settingsToSave) {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({
+          workspace_id: workspaceId,
+          key: key,
+          value: { value: value },
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+    }
+
     return settings;
   }
 
   // ===== BULK OPERATIONS =====
   async clearAll(): Promise<void> {
-    const userId = await this.getUserId();
+    const { workspaceId } = await this.getOrCreateUserWorkspace();
 
-    // Deletar todas as tasks
-    await supabase.from('tasks').delete().eq('user_id', userId);
+    // Deletar todas as tasks do workspace
+    await supabase.from('tasks').delete().eq('workspace_id', workspaceId);
 
-    // Deletar todas as categorias
-    await supabase.from('categories').delete().eq('user_id', userId);
+    // Deletar todas as categorias do workspace
+    await supabase.from('categories').delete().eq('workspace_id', workspaceId);
 
-    // Resetar settings
-    await supabase.from('settings').delete().eq('user_id', userId);
+    // Deletar todas as settings do workspace
+    await supabase.from('settings').delete().eq('workspace_id', workspaceId);
 
     // Recriar categorias iniciais
     for (const cat of INITIAL_CATEGORIES) {

@@ -17,7 +17,7 @@ export function useTasks() {
       const data = await dataRepository.getTasks();
       setTasks(data);
     } catch (error) {
-      console.error('Error loading tasks:', error);
+      // Error loading tasks
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export function useCategories() {
       const data = await dataRepository.getCategories();
       setCategories(data);
     } catch (error) {
-      console.error('Error loading categories:', error);
+      // Error loading categories
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export function useSettings() {
       const data = await dataRepository.getSettings();
       setSettings(data);
     } catch (error) {
-      console.error('Error loading settings:', error);
+      // Error loading settings
     } finally {
       setLoading(false);
     }

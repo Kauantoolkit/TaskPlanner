@@ -1,14 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, CalendarCheck2, ListTodo, Menu, X } from 'lucide-react';
+import { Search, CalendarCheck2, ListTodo, Menu, X, Loader2 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TaskItem } from './components/TaskItem';
 import { AddTaskModal } from './components/AddTaskModal';
 import { CategoryModal } from './components/CategoryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CalendarView } from './components/CalendarView';
-import { useLocalStorage } from './hooks/useLocalStorage';
+import { useDataRepository } from './hooks/useDataRepository';
 import { Toaster, toast } from 'sonner';
 import { ImageWithFallback } from './components/figma/ImageWithFallback';
 import { Task, Category, Settings } from './types';
@@ -44,9 +44,19 @@ export default function App() {
 }
 
 function AppContent() {
-  const [tasks, setTasks] = useLocalStorage<Task[]>('agenda-tasks', []);
-  const [categories, setCategories] = useLocalStorage<Category[]>('agenda-categories', INITIAL_CATEGORIES);
-  const [settings, setSettings] = useLocalStorage<Settings>('agenda-settings', INITIAL_SETTINGS);
+  const {
+    tasks,
+    categories,
+    settings,
+    loading,
+    addTask,
+    updateTask,
+    deleteTask,
+    addCategory,
+    deleteCategory,
+    updateSettings,
+    clearAll,
+  } = useDataRepository();
   const isMobile = useIsMobile();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -58,6 +68,18 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Mostrar loading se ainda carregando dados
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={48} className="text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400 font-bold">Carregando dados...</p>
+        </div>
+      </div>
+    );
+  }
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
@@ -92,68 +114,78 @@ function AppContent() {
     };
   }, [filteredTasks, formattedSelectedDate]);
 
-  const handleAddTask = (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
-    const task: Task = {
-      id: crypto.randomUUID(),
-      text: newTask.text,
-      isPermanent: newTask.isPermanent,
-      completedDates: [],
-      date: newTask.isPermanent || newTask.isDelivery ? undefined : newTask.date,
-      completed: false,
-      categoryId: newTask.categoryId,
-      isDelivery: newTask.isDelivery,
-      deliveryDate: newTask.deliveryDate,
-      assignedToId: '',
-      createdById: '',
-      workspaceId: ''
-    };
-    setTasks(prev => [...prev, task]);
-    toast.success(newTask.isDelivery ? 'Entrega criada!' : 'Tarefa adicionada!');
+  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+    try {
+      await addTask({
+        text: newTask.text,
+        isPermanent: newTask.isPermanent,
+        completedDates: [],
+        date: newTask.isPermanent || newTask.isDelivery ? undefined : newTask.date,
+        completed: false,
+        categoryId: newTask.categoryId,
+        isDelivery: newTask.isDelivery,
+        deliveryDate: newTask.deliveryDate,
+      });
+      toast.success(newTask.isDelivery ? 'Entrega criada!' : 'Tarefa adicionada!');
+    } catch (err) {
+      toast.error('Erro ao adicionar tarefa');
+    }
   };
 
-  const handleToggleTask = (id: string, customDate?: string) => {
+  const handleToggleTask = async (id: string, customDate?: string) => {
     const targetDate = customDate || formattedSelectedDate;
-    setTasks(prev => prev.map(task => {
-      if (task.id !== id) return task;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
 
-      if (task.isPermanent) {
-        const isCompleted = task.completedDates.includes(targetDate);
-        const newCompletedDates = isCompleted
-          ? task.completedDates.filter(d => d !== targetDate)
-          : [...task.completedDates, targetDate];
-        return { ...task, completedDates: newCompletedDates };
-      }
-
-      return { ...task, completed: !task.completed };
-    }));
+    if (task.isPermanent) {
+      const isCompleted = task.completedDates.includes(targetDate);
+      const newCompletedDates = isCompleted
+        ? task.completedDates.filter(d => d !== targetDate)
+        : [...task.completedDates, targetDate];
+      await updateTask(id, { completedDates: newCompletedDates });
+    } else {
+      await updateTask(id, { completed: !task.completed });
+    }
   };
 
-  const handleDeleteTask = (id: string) => {
+  const handleDeleteTask = async (id: string) => {
     if (settings.confirmDelete) {
       if (!confirm('Deseja excluir esta tarefa?')) return;
     }
-    setTasks(prev => prev.filter(task => task.id !== id));
-    toast.info('Tarefa removida');
+    try {
+      await deleteTask(id);
+      toast.info('Tarefa removida');
+    } catch (err) {
+      toast.error('Erro ao remover tarefa');
+    }
   };
 
-  const handleAddCategory = (name: string, color: string) => {
-    const newCat: Category = { id: crypto.randomUUID(), name, color };
-    setCategories(prev => [...prev, newCat]);
-    toast.success('Categoria criada!');
+  const handleAddCategory = async (name: string, color: string) => {
+    try {
+      await addCategory(name, color);
+      toast.success('Categoria criada!');
+    } catch (err) {
+      toast.error('Erro ao criar categoria');
+    }
   };
 
-  const handleDeleteCategory = (id: string) => {
-    setCategories(prev => prev.filter(c => c.id !== id));
-    setTasks(prev => prev.map(t => t.categoryId === id ? { ...t, categoryId: undefined } : t));
-    toast.info('Categoria removida');
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      await deleteCategory(id);
+      toast.info('Categoria removida');
+    } catch (err) {
+      toast.error('Erro ao remover categoria');
+    }
   };
 
-  const handleClearAll = () => {
-    setTasks([]);
-    setCategories(INITIAL_CATEGORIES);
-    setSettings(INITIAL_SETTINGS);
-    setIsSettingsModalOpen(false);
-    toast.success('Todos os dados foram limpos.');
+  const handleClearAll = async () => {
+    try {
+      await clearAll();
+      setIsSettingsModalOpen(false);
+      toast.success('Todos os dados foram limpos.');
+    } catch (err) {
+      toast.error('Erro ao limpar dados');
+    }
   };
 
   const handleEditTask = (id: string) => {
@@ -164,21 +196,20 @@ function AppContent() {
     }
   };
 
-  const handleUpdateTask = (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
-    setTasks(prev => prev.map(task => {
-      if (task.id !== id) return task;
-      
-      return {
-        ...task,
+  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+    try {
+      await updateTask(id, {
         text: updatedData.text,
         isPermanent: updatedData.isPermanent,
         date: updatedData.isPermanent || updatedData.isDelivery ? undefined : updatedData.date,
         categoryId: updatedData.categoryId,
         isDelivery: updatedData.isDelivery,
         deliveryDate: updatedData.deliveryDate
-      };
-    }));
-    toast.success('Tarefa atualizada!');
+      });
+      toast.success('Tarefa atualizada!');
+    } catch (err) {
+      toast.error('Erro ao atualizar tarefa');
+    }
   };
 
   const handleCloseModal = () => {
@@ -461,7 +492,7 @@ function AppContent() {
         {isSettingsModalOpen && (
           <SettingsModal
             settings={settings}
-            onUpdate={setSettings}
+            onUpdate={updateSettings}
             onClose={() => setIsSettingsModalOpen(false)}
             onClearAll={handleClearAll}
           />

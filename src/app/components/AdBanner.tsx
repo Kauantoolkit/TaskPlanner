@@ -10,7 +10,7 @@ export function AdBanner() {
         try {
           (window.adsbygoogle as unknown as { push: (params: object) => void }).push({});
         } catch (e) {
-          console.error('AdSense error:', e);
+          // AdSense error
         }
       }
     };
