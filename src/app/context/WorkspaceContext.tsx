@@ -234,13 +234,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const removeMember = (userId: string) => {
     if (!currentWorkspace) return;
     
-    // Não pode remover o owner
+    // Não pode remover o owner - simplesmente não faz nada
     if (userId === currentWorkspace.ownerId) {
-      alert('Não é possível remover o dono do workspace!');
       return;
     }
 
-    setWorkspaces(prev => prev.map(w => 
+    setWorkspaces(prev => prev.map(w =>
       w.id === currentWorkspace.id 
         ? { ...w, memberIds: w.memberIds.filter(id => id !== userId) }
         : w
