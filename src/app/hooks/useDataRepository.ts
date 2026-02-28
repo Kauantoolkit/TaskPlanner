@@ -17,6 +17,9 @@ const INITIAL_SETTINGS: Settings = {
 };
 
 export function useDataRepository() {
+  // Alert para confirmar que o hook está sendo executado
+  alert('useDataRepository executado! isSupabaseConfigured: ' + isSupabaseConfigured);
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
@@ -29,7 +32,20 @@ export function useDataRepository() {
 
   // Verificar se deve usar modo Supabase
   const useSupabase = useMemo(() => {
-    return isSupabaseConfigured && !!user;
+    const result = isSupabaseConfigured && !!user;
+    console.log('[DEBUG] useSupabase:', { 
+      isSupabaseConfigured, 
+      userId: user?.id, 
+      result 
+    });
+    // Alert para debug
+    if (typeof window !== 'undefined') {
+      // @ts-ignore
+      window.debugLog = window.debugLog || [];
+      // @ts-ignore
+      window.debugLog.push({ isSupabaseConfigured, userId: user?.id, result });
+    }
+    return result;
   }, [isSupabaseConfigured, user]);
 
   // Efeito para monitorar autenticação
@@ -40,6 +56,8 @@ export function useDataRepository() {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[DEBUG] Session:', session?.user?.id);
+      alert('[DEBUG] Session: ' + (session?.user?.id || 'null'));
       setUser(session?.user ?? null);
       setAuthLoading(false);
     });
@@ -127,13 +145,17 @@ export function useDataRepository() {
     };
 
     if (useSupabase) {
+      console.log('[DEBUG] Salvando task no Supabase:', newTask.text);
       try {
         await repository.createTask(newTask);
+        console.log('[DEBUG] Task salva no Supabase com sucesso');
         setTasks(prev => [newTask, ...prev]);
       } catch (err) {
+        console.error('[DEBUG] Erro ao salvar task no Supabase:', err);
         throw err;
       }
     } else {
+      console.log('[DEBUG] Salvando task no localStorage:', newTask.text);
       setTasks(prev => [newTask, ...prev]);
     }
   }, [user, useSupabase, repository]);
