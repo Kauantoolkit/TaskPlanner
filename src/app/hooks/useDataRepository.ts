@@ -16,9 +16,6 @@ const INITIAL_SETTINGS: Settings = {
   confirmDelete: true,
 };
 
-// Timeout para carregamento (10 segundos)
-const LOADING_TIMEOUT = 10000;
-
 export function useDataRepository() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
@@ -27,14 +24,10 @@ export function useDataRepository() {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  
-  // Ref para controlar o timeout
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(true);
 
+  const isMountedRef = useRef(true);
   const repository = useMemo(() => new SupabaseRepository(), []);
 
-  // Verificar se deve usar modo Supabase
   const useSupabase = useMemo(() => {
     return isSupabaseConfigured && !!user;
   }, [isSupabaseConfigured, user]);
@@ -44,23 +37,7 @@ export function useDataRepository() {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
     };
-  }, []);
-
-  // Função para forçar loading = false (com timeout de segurança)
-  const forceStopLoading = useCallback(() => {
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-    }
-    loadingTimeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
-        setLoading(false);
-        console.warn('Timeout atingido - forçando carregamento local');
-      }
-    }, LOADING_TIMEOUT);
   }, []);
 
   // Efeito para monitorar autenticação
@@ -73,6 +50,10 @@ export function useDataRepository() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isMountedRef.current) {
         setUser(session?.user ?? null);
+        setAuthLoading(false);
+      }
+    }).catch(() => {
+      if (isMountedRef.current) {
         setAuthLoading(false);
       }
     });
@@ -88,32 +69,37 @@ export function useDataRepository() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Carregar dados (executa quando authLoading termina ou quando user muda)
+  // Carregar dados
   useEffect(() => {
-    // Se ainda verificando auth, esperar
     if (authLoading) {
       return;
     }
 
-    // Modo local (sem Supabase configurado ou usuário não logado)
+    // Modo local
     if (!isSupabaseConfigured || !user) {
-      const localTasks = localStorage.getItem('agenda-tasks');
-      const localCategories = localStorage.getItem('agenda-categories');
-      const localSettings = localStorage.getItem('agenda-settings');
-      
-      if (isMountedRef.current) {
-        if (localTasks) setTasks(JSON.parse(localTasks));
-        if (localCategories) setCategories(JSON.parse(localCategories));
-        if (localSettings) setSettings(JSON.parse(localSettings));
-        setLoading(false);
+      try {
+        const localTasks = localStorage.getItem('agenda-tasks');
+        const localCategories = localStorage.getItem('agenda-categories');
+        const localSettings = localStorage.getItem('agenda-settings');
+        
+        if (isMountedRef.current) {
+          if (localTasks) setTasks(JSON.parse(localTasks));
+          if (localCategories) setCategories(JSON.parse(localCategories));
+          if (localSettings) setSettings(JSON.parse(localSettings));
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error('Erro ao carregar dados locais:', e);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
       return;
     }
 
-    // Modo Supabase (usuário logado e Supabase configurado)
+    // Modo Supabase
     const loadData = async () => {
-      // Iniciar timeout de segurança
-      forceStopLoading();
+      if (!isMountedRef.current) return;
       
       try {
         setLoading(true);
@@ -130,44 +116,34 @@ export function useDataRepository() {
         setTasks(tasksData || []);
         setCategories(categoriesData || INITIAL_CATEGORIES);
         setSettings(settingsData || INITIAL_SETTINGS);
-        setError(null);
       } catch (err: any) {
         console.error('Erro ao carregar dados do Supabase:', err);
         
         if (!isMountedRef.current) return;
         
-        // Se der erro no Supabase, tenta carregar do localStorage como fallback
-        const localTasks = localStorage.getItem('agenda-tasks');
-        const localCategories = localStorage.getItem('agenda-categories');
-        const localSettings = localStorage.getItem('agenda-settings');
-        
-        if (localTasks) setTasks(JSON.parse(localTasks));
-        if (localCategories) setCategories(JSON.parse(localCategories));
-        if (localSettings) setSettings(JSON.parse(localSettings));
+        // Fallback para localStorage
+        try {
+          const localTasks = localStorage.getItem('agenda-tasks');
+          const localCategories = localStorage.getItem('agenda-categories');
+          const localSettings = localStorage.getItem('agenda-settings');
+          
+          if (localTasks) setTasks(JSON.parse(localTasks));
+          if (localCategories) setCategories(JSON.parse(localCategories));
+          if (localSettings) setSettings(JSON.parse(localSettings));
+        } catch (parseErr) {
+          console.error('Erro no fallback:', parseErr);
+        }
         
         setError(err.message);
-        console.warn('Fallback para dados locais devido a erro no Supabase');
       } finally {
         if (isMountedRef.current) {
           setLoading(false);
-          // Limpar timeout
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-            loadingTimeoutRef.current = null;
-          }
         }
       }
     };
 
     loadData();
-    
-    // Cleanup: garantir que loading seja false se o componente desmontar
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, [authLoading, user, isSupabaseConfigured, repository, forceStopLoading]);
+  }, [authLoading, user, isSupabaseConfigured, repository]);
 
   // Salvar no localStorage apenas quando não está usando Supabase
   useEffect(() => {

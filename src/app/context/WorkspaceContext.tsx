@@ -1,28 +1,18 @@
-
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { Workspace, User } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface WorkspaceContextType {
-  // Workspace atual
   currentWorkspace: Workspace | null;
   workspaces: Workspace[];
-  
-  // Usuário atual (do Supabase Auth ou local)
   currentUser: User | null;
   supabaseUser: SupabaseUser | null;
-  
-  // Membros do workspace atual
   members: User[];
-  
-  // Ações
   createWorkspace: (name: string, type: Workspace['type']) => void;
   switchWorkspace: (workspaceId: string) => void;
   addMember: (name: string, email: string) => void;
   removeMember: (userId: string) => void;
-  
-  // Helpers
   canCreateForOthers: () => boolean;
   isOwner: () => boolean;
   getMemberById: (id: string) => User | undefined;
@@ -38,10 +28,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<User[]>([]);
   const [initialized, setInitialized] = useState(false);
 
-  // Ref para verificar se componente está mountado
   const isMountedRef = useRef(true);
 
-  // Cleanup ao desmontar
+  // Cleanup
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -49,11 +38,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Função para inicializar workspace
-  const initializeWorkspace = useCallback((userId: string, isLocal: boolean = false) => {
+  // Função para inicializar workspace (definida sem useCallback)
+  const initWorkspace = (userId: string, isLocal: boolean = false) => {
     if (!isMountedRef.current) return;
 
-    // Carregar ou criar workspace inicial
     const savedWorkspaces = localStorage.getItem(`workspaces_${userId}`);
     if (savedWorkspaces) {
       const parsed = JSON.parse(savedWorkspaces);
@@ -66,7 +54,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setCurrentWorkspaceId(parsed[0]?.id || '');
       }
     } else {
-      // Criar workspace inicial
       const initialWorkspace: Workspace = {
         id: `workspace-${Date.now()}`,
         name: 'Meu Espaço',
@@ -80,7 +67,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(`workspaces_${userId}`, JSON.stringify([initialWorkspace]));
     }
 
-    // Carregar membros
     const savedMembers = localStorage.getItem(`members_${userId}`);
     const userData = isLocal 
       ? { id: userId, name: 'Usuário Local', email: 'local@planner.com', role: 'owner' as const }
@@ -94,12 +80,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
     
     setInitialized(true);
-  }, []);
+  };
 
-  // Escutar mudanças de autenticação (só se Supabase configurado)
+  // Escuta auth
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Modo local: criar usuário padrão
       const localUser: User = {
         id: 'local-user',
         name: 'Usuário Local',
@@ -107,36 +92,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         role: 'owner',
       };
       setCurrentUser(localUser);
-      initializeWorkspace('local-user', true);
+      initWorkspace('local-user', true);
       return;
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMountedRef.current) return;
       setSupabaseUser(session?.user ?? null);
-    }).catch((err) => {
-      console.error('Erro ao buscar sessão no WorkspaceContext:', err);
+    }).catch(() => {
       if (isMountedRef.current) {
         setSupabaseUser(null);
       }
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (isMountedRef.current) {
         setSupabaseUser(session?.user ?? null);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [initializeWorkspace]);
+  }, []);
 
-  // Quando o supabaseUser mudar, criar/carregar o usuário interno
+  // Quando supabaseUser mudar
   useEffect(() => {
-    // Modo local (sem Supabase)
     if (!isSupabaseConfigured && currentUser) {
-      initializeWorkspace(currentUser.id, true);
+      initWorkspace(currentUser.id, true);
       return;
     }
 
@@ -150,19 +131,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Criar usuário interno a partir do Supabase User
     const internalUser: User = {
       id: supabaseUser.id,
       name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuário',
       email: supabaseUser.email || '',
-      role: 'owner', // Primeiro usuário é sempre owner do seu workspace
+      role: 'owner',
     };
 
     setCurrentUser(internalUser);
-    initializeWorkspace(supabaseUser.id, false);
-  }, [supabaseUser, currentUser, initializeWorkspace]);
+    initWorkspace(supabaseUser.id, false);
+  }, [supabaseUser, currentUser]);
 
-  // Salvar workspaces quando mudarem
+  // Salvar workspaces
   useEffect(() => {
     const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
     if (userId && workspaces.length > 0 && initialized) {
@@ -188,7 +168,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || null;
 
-  // Criar novo workspace
   const createWorkspace = (name: string, type: Workspace['type']) => {
     if (!currentUser) return;
 
@@ -204,12 +183,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setCurrentWorkspaceId(newWorkspace.id);
   };
 
-  // Trocar workspace
   const switchWorkspace = (workspaceId: string) => {
     setCurrentWorkspaceId(workspaceId);
   };
 
-  // Adicionar membro (sem limites!)
   const addMember = (name: string, email: string) => {
     if (!currentWorkspace || !currentUser) return;
 
@@ -221,7 +198,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
 
     setMembers(prev => [...prev, newMember]);
-    
     setWorkspaces(prev => prev.map(w => 
       w.id === currentWorkspace.id 
         ? { ...w, memberIds: [...w.memberIds, newMember.id] }
@@ -229,14 +205,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ));
   };
 
-  // Remover membro
   const removeMember = (userId: string) => {
     if (!currentWorkspace) return;
-    
-    // Não pode remover o owner - simplesmente não faz nada
-    if (userId === currentWorkspace.ownerId) {
-      return;
-    }
+    if (userId === currentWorkspace.ownerId) return;
 
     setWorkspaces(prev => prev.map(w =>
       w.id === currentWorkspace.id 
@@ -245,19 +216,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ));
   };
 
-  // Verificar se pode criar tarefas para outros
   const canCreateForOthers = () => {
     if (!currentWorkspace || !currentUser) return false;
     return currentUser.role === 'owner' || currentUser.id === currentWorkspace.ownerId;
   };
 
-  // Verificar se é owner
   const isOwner = () => {
     if (!currentWorkspace || !currentUser) return false;
     return currentUser.id === currentWorkspace.ownerId;
   };
 
-  // Pegar membro por ID
   const getMemberById = (id: string) => {
     return members.find(m => m.id === id);
   };
