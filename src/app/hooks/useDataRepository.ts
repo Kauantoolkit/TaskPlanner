@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, Category, Settings } from '../types';
 import { SupabaseRepository } from '../services/SupabaseRepository';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -23,17 +23,25 @@ export function useDataRepository() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const repository = new SupabaseRepository();
+  const repository = useMemo(() => new SupabaseRepository(), []);
 
+  // Verificar se deve usar modo Supabase
+  const useSupabase = useMemo(() => {
+    return isSupabaseConfigured && !!user;
+  }, [isSupabaseConfigured, user]);
+
+  // Efeito para monitorar autenticação
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      setLoading(false);
+      setAuthLoading(false);
       return;
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      setAuthLoading(false);
     });
 
     const {
@@ -45,8 +53,15 @@ export function useDataRepository() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Carregar dados (executa quando authLoading termina ou quando user muda)
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    // Se ainda verificando auth, esperar
+    if (authLoading) {
+      return;
+    }
+
+    // Modo local (sem Supabase configurado ou usuário não logado)
+    if (!isSupabaseConfigured || !user) {
       const localTasks = localStorage.getItem('agenda-tasks');
       const localCategories = localStorage.getItem('agenda-categories');
       const localSettings = localStorage.getItem('agenda-settings');
@@ -58,11 +73,7 @@ export function useDataRepository() {
       return;
     }
 
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
+    // Modo Supabase (usuário logado e Supabase configurado)
     const loadData = async () => {
       try {
         setLoading(true);
@@ -77,6 +88,7 @@ export function useDataRepository() {
         setSettings(settingsData || INITIAL_SETTINGS);
         setError(null);
       } catch (err: any) {
+        console.error('Erro ao carregar dados:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -84,25 +96,26 @@ export function useDataRepository() {
     };
 
     loadData();
-  }, [user, isSupabaseConfigured]);
+  }, [authLoading, user, isSupabaseConfigured, repository]);
 
+  // Salvar no localStorage apenas quando não está usando Supabase
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!useSupabase) {
       localStorage.setItem('agenda-tasks', JSON.stringify(tasks));
     }
-  }, [tasks, isSupabaseConfigured]);
+  }, [tasks, useSupabase]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!useSupabase) {
       localStorage.setItem('agenda-categories', JSON.stringify(categories));
     }
-  }, [categories, isSupabaseConfigured]);
+  }, [categories, useSupabase]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!useSupabase) {
       localStorage.setItem('agenda-settings', JSON.stringify(settings));
     }
-  }, [settings, isSupabaseConfigured]);
+  }, [settings, useSupabase]);
 
   const addTask = useCallback(async (taskData: Omit<Task, 'id' | 'createdById' | 'assignedToId' | 'workspaceId'>) => {
     const newTask: Task = {
@@ -113,7 +126,7 @@ export function useDataRepository() {
       workspaceId: '',
     };
 
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.createTask(newTask);
         setTasks(prev => [newTask, ...prev]);
@@ -123,10 +136,10 @@ export function useDataRepository() {
     } else {
       setTasks(prev => [newTask, ...prev]);
     }
-  }, [user]);
+  }, [user, useSupabase, repository]);
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.updateTask(id, updates);
         setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
@@ -136,10 +149,10 @@ export function useDataRepository() {
     } else {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   const deleteTask = useCallback(async (id: string) => {
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.deleteTask(id);
         setTasks(prev => prev.filter(t => t.id !== id));
@@ -149,7 +162,7 @@ export function useDataRepository() {
     } else {
       setTasks(prev => prev.filter(t => t.id !== id));
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   const addCategory = useCallback(async (name: string, color: string) => {
     const newCategory: Category = {
@@ -158,7 +171,7 @@ export function useDataRepository() {
       color,
     };
 
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.createCategory(newCategory);
         setCategories(prev => [...prev, newCategory]);
@@ -168,10 +181,10 @@ export function useDataRepository() {
     } else {
       setCategories(prev => [...prev, newCategory]);
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   const deleteCategory = useCallback(async (id: string) => {
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.deleteCategory(id);
         setCategories(prev => prev.filter(c => c.id !== id));
@@ -183,10 +196,10 @@ export function useDataRepository() {
       setCategories(prev => prev.filter(c => c.id !== id));
       setTasks(prev => prev.map(t => t.categoryId === id ? { ...t, categoryId: undefined } : t));
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   const updateSettings = useCallback(async (newSettings: Settings) => {
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.updateSettings(newSettings);
         setSettings(newSettings);
@@ -196,10 +209,10 @@ export function useDataRepository() {
     } else {
       setSettings(newSettings);
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   const clearAll = useCallback(async () => {
-    if (isSupabaseConfigured && user) {
+    if (useSupabase) {
       try {
         await repository.clearAll();
         setTasks([]);
@@ -213,7 +226,7 @@ export function useDataRepository() {
       setCategories(INITIAL_CATEGORIES);
       setSettings(INITIAL_SETTINGS);
     }
-  }, [user]);
+  }, [useSupabase, repository]);
 
   return {
     tasks,
@@ -221,7 +234,7 @@ export function useDataRepository() {
     settings,
     loading,
     error,
-    isSupabase: isSupabaseConfigured && !!user,
+    isSupabase: useSupabase,
     addTask,
     updateTask,
     deleteTask,
