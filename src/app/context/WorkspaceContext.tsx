@@ -1,13 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Workspace, User } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { User as SupabaseUser } from '@supabase/supabase-js';
 
 interface WorkspaceContextType {
   currentWorkspace: Workspace | null;
   workspaces: Workspace[];
   currentUser: User | null;
-  supabaseUser: SupabaseUser | null;
   members: User[];
   createWorkspace: (name: string, type: Workspace['type']) => void;
   switchWorkspace: (workspaceId: string) => void;
@@ -20,157 +17,34 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('');
-  const [members, setMembers] = useState<User[]>([]);
-  const [initialized, setInitialized] = useState(false);
+const DEFAULT_USER: User = {
+  id: 'local-user',
+  name: 'Usuário Local',
+  email: 'local@planner.com',
+  role: 'owner',
+};
 
-  const isMountedRef = useRef(true);
+const DEFAULT_WORKSPACE: Workspace = {
+  id: 'workspace-local',
+  name: 'Meu Espaço',
+  type: 'personal',
+  ownerId: 'local-user',
+  memberIds: ['local-user'],
+  createdAt: new Date().toISOString(),
+};
 
-  // Cleanup
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+export function WorkspaceProvider({ children }: { children: ReactNode }): React.ReactElement {
+  // Estados sempre na mesma ordem
+  const [currentUser] = useState<User>(DEFAULT_USER);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([DEFAULT_WORKSPACE]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(DEFAULT_WORKSPACE.id);
+  const [members, setMembers] = useState<User[]>([DEFAULT_USER]);
 
-  // Função para inicializar workspace (definida sem useCallback)
-  const initWorkspace = (userId: string, isLocal: boolean = false) => {
-    if (!isMountedRef.current) return;
+  // Workspace atual computado
+  const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || DEFAULT_WORKSPACE;
 
-    const savedWorkspaces = localStorage.getItem(`workspaces_${userId}`);
-    if (savedWorkspaces) {
-      const parsed = JSON.parse(savedWorkspaces);
-      setWorkspaces(parsed);
-      
-      const savedCurrentId = localStorage.getItem(`current_workspace_${userId}`);
-      if (savedCurrentId && parsed.find((w: Workspace) => w.id === savedCurrentId)) {
-        setCurrentWorkspaceId(savedCurrentId);
-      } else {
-        setCurrentWorkspaceId(parsed[0]?.id || '');
-      }
-    } else {
-      const initialWorkspace: Workspace = {
-        id: `workspace-${Date.now()}`,
-        name: 'Meu Espaço',
-        type: 'personal',
-        ownerId: userId,
-        memberIds: [userId],
-        createdAt: new Date().toISOString(),
-      };
-      setWorkspaces([initialWorkspace]);
-      setCurrentWorkspaceId(initialWorkspace.id);
-      localStorage.setItem(`workspaces_${userId}`, JSON.stringify([initialWorkspace]));
-    }
-
-    const savedMembers = localStorage.getItem(`members_${userId}`);
-    const userData = isLocal 
-      ? { id: userId, name: 'Usuário Local', email: 'local@planner.com', role: 'owner' as const }
-      : null;
-    
-    if (savedMembers) {
-      setMembers(JSON.parse(savedMembers));
-    } else if (userData) {
-      setMembers([userData]);
-      localStorage.setItem(`members_${userId}`, JSON.stringify([userData]));
-    }
-    
-    setInitialized(true);
-  };
-
-  // Escuta auth
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
-      const localUser: User = {
-        id: 'local-user',
-        name: 'Usuário Local',
-        email: 'local@planner.com',
-        role: 'owner',
-      };
-      setCurrentUser(localUser);
-      initWorkspace('local-user', true);
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMountedRef.current) return;
-      setSupabaseUser(session?.user ?? null);
-    }).catch(() => {
-      if (isMountedRef.current) {
-        setSupabaseUser(null);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMountedRef.current) {
-        setSupabaseUser(session?.user ?? null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Quando supabaseUser mudar
-  useEffect(() => {
-    if (!isSupabaseConfigured && currentUser) {
-      initWorkspace(currentUser.id, true);
-      return;
-    }
-
-    if (!supabaseUser) {
-      if (isSupabaseConfigured) {
-        setCurrentUser(null);
-        setWorkspaces([]);
-        setMembers([]);
-        setInitialized(false);
-      }
-      return;
-    }
-
-    const internalUser: User = {
-      id: supabaseUser.id,
-      name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuário',
-      email: supabaseUser.email || '',
-      role: 'owner',
-    };
-
-    setCurrentUser(internalUser);
-    initWorkspace(supabaseUser.id, false);
-  }, [supabaseUser, currentUser]);
-
-  // Salvar workspaces
-  useEffect(() => {
-    const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && workspaces.length > 0 && initialized) {
-      localStorage.setItem(`workspaces_${userId}`, JSON.stringify(workspaces));
-    }
-  }, [workspaces, supabaseUser, currentUser, initialized]);
-
-  // Salvar workspace atual
-  useEffect(() => {
-    const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && currentWorkspaceId && initialized) {
-      localStorage.setItem(`current_workspace_${userId}`, currentWorkspaceId);
-    }
-  }, [currentWorkspaceId, supabaseUser, currentUser, initialized]);
-
-  // Salvar membros
-  useEffect(() => {
-    const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && members.length > 0 && initialized) {
-      localStorage.setItem(`members_${userId}`, JSON.stringify(members));
-    }
-  }, [members, supabaseUser, currentUser, initialized]);
-
-  const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || null;
-
-  const createWorkspace = (name: string, type: Workspace['type']) => {
-    if (!currentUser) return;
-
+  // Funções - definidas uma única vez
+  const createWorkspace = useCallback((name: string, type: Workspace['type']) => {
     const newWorkspace: Workspace = {
       id: `workspace-${Date.now()}`,
       name,
@@ -181,72 +55,76 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
     setWorkspaces(prev => [...prev, newWorkspace]);
     setCurrentWorkspaceId(newWorkspace.id);
-  };
+  }, [currentUser.id]);
 
-  const switchWorkspace = (workspaceId: string) => {
+  const switchWorkspace = useCallback((workspaceId: string) => {
     setCurrentWorkspaceId(workspaceId);
-  };
+  }, []);
 
-  const addMember = (name: string, email: string) => {
-    if (!currentWorkspace || !currentUser) return;
-
+  const addMember = useCallback((name: string, email: string) => {
     const newMember: User = {
       id: `user-${Date.now()}`,
       name,
       email,
       role: 'member',
     };
-
     setMembers(prev => [...prev, newMember]);
     setWorkspaces(prev => prev.map(w => 
       w.id === currentWorkspace.id 
         ? { ...w, memberIds: [...w.memberIds, newMember.id] }
         : w
     ));
-  };
+  }, [currentWorkspace.id]);
 
-  const removeMember = (userId: string) => {
-    if (!currentWorkspace) return;
+  const removeMember = useCallback((userId: string) => {
     if (userId === currentWorkspace.ownerId) return;
-
     setWorkspaces(prev => prev.map(w =>
       w.id === currentWorkspace.id 
         ? { ...w, memberIds: w.memberIds.filter(id => id !== userId) }
         : w
     ));
-  };
+  }, [currentWorkspace.id, currentWorkspace.ownerId]);
 
-  const canCreateForOthers = () => {
-    if (!currentWorkspace || !currentUser) return false;
+  const canCreateForOthers = useCallback(() => {
     return currentUser.role === 'owner' || currentUser.id === currentWorkspace.ownerId;
-  };
+  }, [currentUser.role, currentUser.id, currentWorkspace.ownerId]);
 
-  const isOwner = () => {
-    if (!currentWorkspace || !currentUser) return false;
+  const isOwner = useCallback(() => {
     return currentUser.id === currentWorkspace.ownerId;
-  };
+  }, [currentUser.id, currentWorkspace.ownerId]);
 
-  const getMemberById = (id: string) => {
+  const getMemberById = useCallback((id: string) => {
     return members.find(m => m.id === id);
-  };
+  }, [members]);
+
+  const value = useMemo(() => ({
+    currentWorkspace,
+    workspaces,
+    currentUser,
+    members: members.filter(m => currentWorkspace?.memberIds.includes(m.id)),
+    createWorkspace,
+    switchWorkspace,
+    addMember,
+    removeMember,
+    canCreateForOthers,
+    isOwner,
+    getMemberById,
+  }), [
+    currentWorkspace,
+    workspaces,
+    currentUser,
+    members,
+    createWorkspace,
+    switchWorkspace,
+    addMember,
+    removeMember,
+    canCreateForOthers,
+    isOwner,
+    getMemberById,
+  ]);
 
   return (
-    <WorkspaceContext.Provider
-      value={{
-        currentWorkspace,
-        workspaces,
-        currentUser,
-        supabaseUser,
-        members: members.filter(m => currentWorkspace?.memberIds.includes(m.id)),
-        createWorkspace,
-        switchWorkspace,
-        addMember,
-        removeMember,
-        canCreateForOthers,
-        isOwner,
-        getMemberById,
-      }}
-    >
+    <WorkspaceContext.Provider value={value}>
       {children}
     </WorkspaceContext.Provider>
   );

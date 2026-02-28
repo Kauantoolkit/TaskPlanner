@@ -1,29 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { LogIn, Mail, Lock, UserPlus, Loader2, ListTodo, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LoginScreenProps {
   previewMode?: boolean;
+  onLoginSuccess?: () => void;
 }
 
-export function LoginScreen({ previewMode = false }: LoginScreenProps) {
+export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  
+  // Ref para evitar múltiplas verificações de sessão
+  const hasCalledOnLoginSuccess = useRef(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Se está em preview mode, apenas mostra uma mensagem
     if (previewMode) {
       toast.info('Modo preview - configure o Supabase para autenticação real');
       return;
     }
     
     setLoading(true);
+    hasCalledOnLoginSuccess.current = false;
 
     try {
       if (isSignUp) {
@@ -37,7 +41,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
         
         if (error) throw error;
         
-        // Verificar se precisa confirmar email
         if (data?.user?.identities?.length === 0) {
           toast.error('Este email já está cadastrado. Tente fazer login.');
         } else if (data?.user && !data?.session) {
@@ -46,6 +49,11 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
           });
         } else {
           toast.success('✅ Conta criada e autenticado com sucesso!');
+          // Callback paranotificar sucesso
+          if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
+            hasCalledOnLoginSuccess.current = true;
+            onLoginSuccess();
+          }
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -56,9 +64,13 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
         if (error) throw error;
         
         toast.success('✅ Login realizado com sucesso!');
+        // Callback para notificar sucesso
+        if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
+          hasCalledOnLoginSuccess.current = true;
+          onLoginSuccess();
+        }
       }
     } catch (error: any) {
-      // Mensagens de erro mais amigáveis
       let errorMessage = error.message || 'Erro ao autenticar';
       
       if (error.message?.includes('Invalid login credentials')) {
@@ -82,7 +94,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
   };
 
   const handleGoogleLogin = async () => {
-    // Se está em preview mode, apenas mostra uma mensagem
     if (previewMode) {
       toast.info('Modo preview - configure o Supabase para autenticação real');
       return;
@@ -146,7 +157,6 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
       )}
       
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-xl">
             <ListTodo size={32} className="text-white" strokeWidth={2.5} />
@@ -159,10 +169,10 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
           </p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800">
           <div className="flex gap-2 mb-6">
             <button
+              type="button"
               onClick={() => setIsSignUp(false)}
               className={`flex-1 py-2 px-4 rounded-xl font-black text-sm transition-all ${
                 !isSignUp
@@ -173,6 +183,7 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
               ENTRAR
             </button>
             <button
+              type="button"
               onClick={() => setIsSignUp(true)}
               className={`flex-1 py-2 px-4 rounded-xl font-black text-sm transition-all ${
                 isSignUp
@@ -276,6 +287,7 @@ export function LoginScreen({ previewMode = false }: LoginScreenProps) {
           </div>
 
           <button
+            type="button"
             onClick={handleGoogleLogin}
             disabled={loading}
             className="w-full bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-black py-3 rounded-2xl transition-all flex items-center justify-center gap-2"

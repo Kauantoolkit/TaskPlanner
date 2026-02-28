@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, CalendarCheck2, ListTodo, Menu, X, Loader2 } from 'lucide-react';
+import { Search, CalendarCheck2, ListTodo, Menu, Loader2 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TaskItem } from './components/TaskItem';
 import { AddTaskModal } from './components/AddTaskModal';
@@ -11,55 +11,110 @@ import { CalendarView } from './components/CalendarView';
 import { useDataRepository } from './hooks/useDataRepository';
 import { Toaster, toast } from 'sonner';
 import { ImageWithFallback } from './components/figma/ImageWithFallback';
-import { Task, Category, Settings } from './types';
+import { Task } from './types';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { MembersModal } from './components/MembersModal';
-import { AuthProvider } from './components/AuthProvider';
+import { LoginScreen } from './components/LoginScreen';
 import { LocalModeBanner } from './components/LocalModeBanner';
 import { AdBanner } from './components/AdBanner';
 import { useIsMobile } from './components/ui/use-mobile';
-import { Sheet, SheetContent, SheetTrigger } from './components/ui/sheet';
+import { Sheet, SheetContent } from './components/ui/sheet';
 
-const INITIAL_CATEGORIES: Category[] = [
-  { id: '1', name: 'Trabalho', color: 'bg-blue-500 text-white' },
-  { id: '2', name: 'Pessoal', color: 'bg-emerald-500 text-white' },
-  { id: '3', name: 'Saúde', color: 'bg-rose-500 text-white' },
-];
-
-const INITIAL_SETTINGS: Settings = {
-  darkMode: false,
-  showCompleted: true,
-  confirmDelete: true,
-};
-
-export default function App() {
+// Componente de loading simples
+function FullScreenLoader() {
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
-        <AppContent />
-      </WorkspaceProvider>
-    </AuthProvider>
+    <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950 flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 size={48} className="text-blue-600 animate-spin mx-auto mb-4" />
+        <p className="text-gray-400 font-bold">Carregando...</p>
+      </div>
+    </div>
   );
 }
 
+// Verificação de autenticação SIMPLES sem hook
+function useAuthCheck() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(false);
+
+  useEffect(() => {
+    // Verificar se Supabase está configurado
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    const configured = Boolean(supabaseUrl.trim() && supabaseAnonKey.trim());
+    
+    setIsConfigured(configured);
+    
+    if (!configured) {
+      // Modo local - não precisa login
+      setIsLoggedIn(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // Verificar sessão do Supabase
+    import('./lib/supabase').then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data }) => {
+        setIsLoggedIn(!!data?.session?.user);
+        setIsLoading(false);
+      });
+    });
+  }, []);
+
+  return { loading: isLoading, isLoggedIn, isSupabaseConfigured: isConfigured };
+}
+
+export default function App() {
+  const { loading, isLoggedIn, isSupabaseConfigured } = useAuthCheck();
+  
+  // Estados fixos que sempre existem
+  const [appState, setAppState] = useState<'loading' | 'auth' | 'app'>('loading');
+  
+  // Atualiza estado baseado na auth
+  useEffect(() => {
+    if (loading) {
+      setAppState('loading');
+    } else if (isSupabaseConfigured && !isLoggedIn) {
+      setAppState('auth');
+    } else {
+      setAppState('app');
+    }
+  }, [loading, isLoggedIn, isSupabaseConfigured]);
+
+  // Renderização baseada em estado fixo
+  if (appState === 'loading') {
+    return <FullScreenLoader />;
+  }
+
+  if (appState === 'auth') {
+    return (
+      <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950">
+        <LoginScreen onLoginSuccess={() => {
+          // Forçar re-render após login bem-sucedido
+          window.location.reload();
+        }} />
+      </div>
+    );
+  }
+
+  // App principal
+  return (
+    <WorkspaceProvider>
+      <AppContent />
+    </WorkspaceProvider>
+  );
+}
+
+// AppContent SEM props - todos os hooks são fixos
 function AppContent() {
-  const {
-    tasks,
-    categories,
-    settings,
-    loading,
-    addTask,
-    updateTask,
-    deleteTask,
-    addCategory,
-    deleteCategory,
-    updateSettings,
-    clearAll,
-  } = useDataRepository();
+  // Hooks fixos - sempre chamados na mesma ordem
+  const repo = useDataRepository();
   const isMobile = useIsMobile();
   
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // Estados fixos
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentView, setCurrentView] = useState<'planner' | 'calendar'>('planner');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -69,20 +124,12 @@ function AppContent() {
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Mostrar loading se ainda carregando dados
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 size={48} className="text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400 font-bold">Carregando dados...</p>
-        </div>
-      </div>
-    );
-  }
+  // Extrai dados do repo APÓS todos os hooks
+  const { tasks, categories, settings, addTask, updateTask, deleteTask, addCategory, deleteCategory, updateSettings, clearAll } = repo;
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
+  // useMemo fixos
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
@@ -114,6 +161,12 @@ function AppContent() {
     };
   }, [filteredTasks, formattedSelectedDate]);
 
+  // Return condicional DEPOIS de todos os hooks
+  if (repo.loading) {
+    return <FullScreenLoader />;
+  }
+
+  // Handlers
   const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
     try {
       await addTask({
@@ -222,10 +275,8 @@ function AppContent() {
       <Toaster position="top-right" />
       
       <div className="flex h-full w-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-        {/* Sidebar - Desktop: sempre visível | Mobile: via Sheet */}
         {isMobile ? (
           <>
-            {/* Botão do menu hamburguer - só visível em mobile */}
             <button 
               onClick={() => setIsSidebarOpen(true)}
               className="fixed top-4 left-4 z-50 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-100 dark:border-gray-800 min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -233,7 +284,6 @@ function AppContent() {
               <Menu size={24} />
             </button>
             
-            {/* Sheet - Sidebar em mobile */}
             <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
               <SheetContent side="left" className="w-80 p-0 bg-white dark:bg-gray-950">
                 <Sidebar 
