@@ -8,5 +8,11 @@
  * Não é necessário importar nada deste arquivo.
  */
 
+import { SupabaseRepository } from './SupabaseRepository';
+import type { IDataRepository } from './types';
+
+// Singleton instance - use this throughout the app
+export const dataRepository: IDataRepository = new SupabaseRepository();
+
 export { SupabaseRepository } from './SupabaseRepository';
 export type { IDataRepository } from './types';
