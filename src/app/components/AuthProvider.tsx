@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { LoginScreen } from './LoginScreen';
 import { User } from '@supabase/supabase-js';
@@ -8,35 +8,92 @@ interface AuthProviderProps {
   children: React.ReactNode;
 }
 
+// Timeout para carregamento (10 segundos)
+const AUTH_LOADING_TIMEOUT = 10000;
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // Refs para controle de cleanup e timeout
+  const isMountedRef = useRef(true);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Preview mode para visualizar tela de login
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview-login') === 'true';
+
+  // Cleanup ao desmontar
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Função para forçar stop do loading
+  const forceStopAuthLoading = () => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        setLoading(false);
+        console.warn('Auth timeout - forçando autenticação');
+      }
+    }, AUTH_LOADING_TIMEOUT);
+  };
 
   useEffect(() => {
     // Se Supabase não está configurado, pular autenticação
     if (!isSupabaseConfigured) {
-      setLoading(false);
-      setUser(null);
+      if (isMountedRef.current) {
+        setLoading(false);
+        setUser(null);
+      }
       return;
     }
 
+    // Iniciar timeout de segurança
+    forceStopAuthLoading();
+
     // Verificar sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMountedRef.current) return;
+      
       setUser(session?.user ?? null);
       setLoading(false);
+      
+      // Limpar timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    }).catch((err) => {
+      console.error('Erro ao verificar sessão:', err);
+      if (isMountedRef.current) {
+        setLoading(false);
+        setUser(null);
+      }
     });
 
     // Escutar mudanças de autenticação
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (isMountedRef.current) {
+        setUser(session?.user ?? null);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Tela de loading inicial

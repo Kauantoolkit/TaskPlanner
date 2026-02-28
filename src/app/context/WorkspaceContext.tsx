@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from 'react';
 import { Workspace, User } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -35,6 +36,65 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('');
   const [members, setMembers] = useState<User[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  // Ref para verificar se componente está mountado
+  const isMountedRef = useRef(true);
+
+  // Cleanup ao desmontar
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Função para inicializar workspace
+  const initializeWorkspace = useCallback((userId: string, isLocal: boolean = false) => {
+    if (!isMountedRef.current) return;
+
+    // Carregar ou criar workspace inicial
+    const savedWorkspaces = localStorage.getItem(`workspaces_${userId}`);
+    if (savedWorkspaces) {
+      const parsed = JSON.parse(savedWorkspaces);
+      setWorkspaces(parsed);
+      
+      const savedCurrentId = localStorage.getItem(`current_workspace_${userId}`);
+      if (savedCurrentId && parsed.find((w: Workspace) => w.id === savedCurrentId)) {
+        setCurrentWorkspaceId(savedCurrentId);
+      } else {
+        setCurrentWorkspaceId(parsed[0]?.id || '');
+      }
+    } else {
+      // Criar workspace inicial
+      const initialWorkspace: Workspace = {
+        id: `workspace-${Date.now()}`,
+        name: 'Meu Espaço',
+        type: 'personal',
+        ownerId: userId,
+        memberIds: [userId],
+        createdAt: new Date().toISOString(),
+      };
+      setWorkspaces([initialWorkspace]);
+      setCurrentWorkspaceId(initialWorkspace.id);
+      localStorage.setItem(`workspaces_${userId}`, JSON.stringify([initialWorkspace]));
+    }
+
+    // Carregar membros
+    const savedMembers = localStorage.getItem(`members_${userId}`);
+    const userData = isLocal 
+      ? { id: userId, name: 'Usuário Local', email: 'local@planner.com', role: 'owner' as const }
+      : null;
+    
+    if (savedMembers) {
+      setMembers(JSON.parse(savedMembers));
+    } else if (userData) {
+      setMembers([userData]);
+      localStorage.setItem(`members_${userId}`, JSON.stringify([userData]));
+    }
+    
+    setInitialized(true);
+  }, []);
 
   // Escutar mudanças de autenticação (só se Supabase configurado)
   useEffect(() => {
@@ -47,63 +107,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         role: 'owner',
       };
       setCurrentUser(localUser);
+      initializeWorkspace('local-user', true);
       return;
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMountedRef.current) return;
       setSupabaseUser(session?.user ?? null);
+    }).catch((err) => {
+      console.error('Erro ao buscar sessão no WorkspaceContext:', err);
+      if (isMountedRef.current) {
+        setSupabaseUser(null);
+      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSupabaseUser(session?.user ?? null);
+      if (isMountedRef.current) {
+        setSupabaseUser(session?.user ?? null);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [initializeWorkspace]);
 
   // Quando o supabaseUser mudar, criar/carregar o usuário interno
   useEffect(() => {
     // Modo local (sem Supabase)
     if (!isSupabaseConfigured && currentUser) {
-      const userId = currentUser.id;
-      
-      // Carregar ou criar workspace inicial
-      const savedWorkspaces = localStorage.getItem(`workspaces_${userId}`);
-      if (savedWorkspaces) {
-        const parsed = JSON.parse(savedWorkspaces);
-        setWorkspaces(parsed);
-        
-        const savedCurrentId = localStorage.getItem(`current_workspace_${userId}`);
-        if (savedCurrentId && parsed.find((w: Workspace) => w.id === savedCurrentId)) {
-          setCurrentWorkspaceId(savedCurrentId);
-        } else {
-          setCurrentWorkspaceId(parsed[0]?.id || '');
-        }
-      } else {
-        // Criar workspace inicial
-        const initialWorkspace: Workspace = {
-          id: `workspace-${Date.now()}`,
-          name: 'Meu Espaço',
-          type: 'personal',
-          ownerId: userId,
-          memberIds: [userId],
-          createdAt: new Date().toISOString(),
-        };
-        setWorkspaces([initialWorkspace]);
-        setCurrentWorkspaceId(initialWorkspace.id);
-        localStorage.setItem(`workspaces_${userId}`, JSON.stringify([initialWorkspace]));
-      }
-
-      // Carregar membros
-      const savedMembers = localStorage.getItem(`members_${userId}`);
-      if (savedMembers) {
-        setMembers(JSON.parse(savedMembers));
-      } else {
-        setMembers([currentUser]);
-        localStorage.setItem(`members_${userId}`, JSON.stringify([currentUser]));
-      }
+      initializeWorkspace(currentUser.id, true);
       return;
     }
 
@@ -112,6 +145,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setCurrentUser(null);
         setWorkspaces([]);
         setMembers([]);
+        setInitialized(false);
       }
       return;
     }
@@ -125,67 +159,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
 
     setCurrentUser(internalUser);
-
-    // Carregar ou criar workspace inicial
-    const savedWorkspaces = localStorage.getItem(`workspaces_${supabaseUser.id}`);
-    if (savedWorkspaces) {
-      const parsed = JSON.parse(savedWorkspaces);
-      setWorkspaces(parsed);
-      
-      const savedCurrentId = localStorage.getItem(`current_workspace_${supabaseUser.id}`);
-      if (savedCurrentId && parsed.find((w: Workspace) => w.id === savedCurrentId)) {
-        setCurrentWorkspaceId(savedCurrentId);
-      } else {
-        setCurrentWorkspaceId(parsed[0]?.id || '');
-      }
-    } else {
-      // Criar workspace inicial
-      const initialWorkspace: Workspace = {
-        id: `workspace-${Date.now()}`,
-        name: 'Meu Espaço',
-        type: 'personal',
-        ownerId: supabaseUser.id,
-        memberIds: [supabaseUser.id],
-        createdAt: new Date().toISOString(),
-      };
-      setWorkspaces([initialWorkspace]);
-      setCurrentWorkspaceId(initialWorkspace.id);
-      localStorage.setItem(`workspaces_${supabaseUser.id}`, JSON.stringify([initialWorkspace]));
-    }
-
-    // Carregar membros
-    const savedMembers = localStorage.getItem(`members_${supabaseUser.id}`);
-    if (savedMembers) {
-      setMembers(JSON.parse(savedMembers));
-    } else {
-      setMembers([internalUser]);
-      localStorage.setItem(`members_${supabaseUser.id}`, JSON.stringify([internalUser]));
-    }
-  }, [supabaseUser, currentUser]);
+    initializeWorkspace(supabaseUser.id, false);
+  }, [supabaseUser, currentUser, initializeWorkspace]);
 
   // Salvar workspaces quando mudarem
   useEffect(() => {
     const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && workspaces.length > 0) {
+    if (userId && workspaces.length > 0 && initialized) {
       localStorage.setItem(`workspaces_${userId}`, JSON.stringify(workspaces));
     }
-  }, [workspaces, supabaseUser, currentUser]);
+  }, [workspaces, supabaseUser, currentUser, initialized]);
 
   // Salvar workspace atual
   useEffect(() => {
     const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && currentWorkspaceId) {
+    if (userId && currentWorkspaceId && initialized) {
       localStorage.setItem(`current_workspace_${userId}`, currentWorkspaceId);
     }
-  }, [currentWorkspaceId, supabaseUser, currentUser]);
+  }, [currentWorkspaceId, supabaseUser, currentUser, initialized]);
 
   // Salvar membros
   useEffect(() => {
     const userId = isSupabaseConfigured ? supabaseUser?.id : currentUser?.id;
-    if (userId && members.length > 0) {
+    if (userId && members.length > 0 && initialized) {
       localStorage.setItem(`members_${userId}`, JSON.stringify(members));
     }
-  }, [members, supabaseUser, currentUser]);
+  }, [members, supabaseUser, currentUser, initialized]);
 
   const currentWorkspace = workspaces.find(w => w.id === currentWorkspaceId) || null;
 
