@@ -21,8 +21,17 @@ const INITIAL_SETTINGS: Settings = {
 export class SupabaseRepository implements IDataRepository {
   
   private async getUserId(): Promise<string> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Usuário não autenticado');
+    console.log('[SupabaseRepository] getUserId: Buscando usuário...');
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error('[SupabaseRepository] getUserId: Erro ao buscar usuário:', error);
+      throw new Error('Erro ao buscar usuário: ' + error.message);
+    }
+    if (!user) {
+      console.error('[SupabaseRepository] getUserId: Usuário não encontrado');
+      throw new Error('Usuário não autenticado');
+    }
+    console.log('[SupabaseRepository] getUserId: Usuário encontrado:', user.id);
     return user.id;
   }
 
@@ -31,17 +40,27 @@ export class SupabaseRepository implements IDataRepository {
    * O primeiro login cria um workspace "Personal" automaticamente
    */
   private async getOrCreateUserWorkspace(): Promise<{ workspaceId: string; memberId: string }> {
+    console.log('[SupabaseRepository] getOrCreateUserWorkspace: Iniciando...');
     const userId = await this.getUserId();
-    const userEmail = (await supabase.auth.getUser()).data.user?.email || '';
+    console.log('[SupabaseRepository] getOrCreateUserWorkspace: userId =', userId);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email || '';
+    console.log('[SupabaseRepository] getOrCreateUserWorkspace: userEmail =', userEmail);
 
     // Buscar workspaces do usuário
+    console.log('[SupabaseRepository] getOrCreateUserWorkspace: Buscando workspaces...');
     const { data: workspaces, error: wsError } = await supabase
       .from('workspaces')
       .select('id')
       .eq('owner_id', userId)
       .limit(1);
 
-    if (wsError) throw wsError;
+    if (wsError) {
+      console.error('[SupabaseRepository] getOrCreateUserWorkspace: Erro ao buscar workspaces:', wsError);
+      throw wsError;
+    }
+    console.log('[SupabaseRepository] getOrCreateUserWorkspace: workspaces =', workspaces);
 
     let workspaceId: string;
 
@@ -103,23 +122,24 @@ export class SupabaseRepository implements IDataRepository {
   async getTasks(): Promise<Task[]> {
     const { workspaceId } = await this.getOrCreateUserWorkspace();
 
+    // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
       .from('tasks')
-      .select('*')
+      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
     if (!data) return [];
 
-    return data.map(row => ({
+    return data.map((row: any) => ({
       id: row.id,
       text: row.text,
       isPermanent: row.is_permanent,
       completedDates: row.completed_dates || [],
       date: row.date,
       completed: row.completed,
-      categoryId: row.category, // Banco usa 'category' como texto
+      categoryId: row.category,
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
       assignedToId: row.assigned_to_id,
@@ -207,9 +227,10 @@ export class SupabaseRepository implements IDataRepository {
   async getCategories(): Promise<Category[]> {
     const { workspaceId } = await this.getOrCreateUserWorkspace();
 
+    // Especificar colunas explicitamente ao invés de *
     const { data, error } = await supabase
       .from('categories')
-      .select('*')
+      .select('id, name, color, workspace_id, created_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: true });
 
@@ -234,7 +255,7 @@ export class SupabaseRepository implements IDataRepository {
       return createdCategories;
     }
 
-    return data.map(row => ({
+    return data.map((row: any) => ({
       id: row.id,
       name: row.name,
       color: row.color,
@@ -286,14 +307,14 @@ export class SupabaseRepository implements IDataRepository {
   async getSettings(): Promise<Settings> {
     const { workspaceId } = await this.getOrCreateUserWorkspace();
 
-    // Buscar cada setting individualmente
+    // Buscar cada setting individualmente - especificar colunas explicitamente
     const settingsKeys = ['darkMode', 'showCompleted', 'confirmDelete'];
     const result: any = {};
 
     for (const key of settingsKeys) {
       const { data, error } = await supabase
         .from('settings')
-        .select('value')
+        .select('value, key')
         .eq('workspace_id', workspaceId)
         .eq('key', key)
         .single();
