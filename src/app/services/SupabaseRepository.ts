@@ -120,7 +120,8 @@ export class SupabaseRepository implements IDataRepository {
 
   // ===== TASKS =====
   async getTasks(): Promise<Task[]> {
-    const { workspaceId } = await this.getOrCreateUserWorkspace();
+    const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
+    console.log('[SupabaseRepository] getTasks: workspaceId =', workspaceId, 'memberId =', memberId);
 
     // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
@@ -129,7 +130,18 @@ export class SupabaseRepository implements IDataRepository {
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('[SupabaseRepository] getTasks: Erro ao buscar tasks:', error);
+      // Fornecer mensagem de erro mais detalhada
+      if (error.code === '42501') {
+        throw new Error('Permissão negada. Execute o script SUPABASE_FIX_RLS_V2.sql no SQL Editor do Supabase.');
+      } else if (error.code === '42P01') {
+        throw new Error('Tabela tasks não existe. Execute o script SUPABASE_CREATE.sql no SQL Editor do Supabase.');
+      } else if (error.code === '400') {
+        throw new Error('Erro na consulta (400). Verifique as políticas RLS. Execute SUPABASE_FIX_RLS_V2.sql.');
+      }
+      throw new Error(`Erro ao buscar tasks: ${error.message} (${error.code})`);
+    }
     if (!data) return [];
 
     return data.map((row: any) => ({
