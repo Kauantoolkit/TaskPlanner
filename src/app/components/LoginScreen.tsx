@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { LogIn, Mail, Lock, UserPlus, Loader2, ListTodo, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,12 +17,59 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
   
   // Ref para evitar múltiplas verificações de sessão
   const hasCalledOnLoginSuccess = useRef(false);
+  
+  // Contador de tentativas para rate limiting client-side
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  
+  // Timer para countdown - uso de refs para evitar re-renders desnecessários
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    if (blockedUntil && countdown > 0) {
+      countdownRef.current = setTimeout(() => {
+        setCountdown(prev => prev - 1);
+      }, 1000);
+      return () => {
+        if (countdownRef.current) clearTimeout(countdownRef.current);
+      };
+    } else if (blockedUntil && countdown <= 0) {
+      setBlockedUntil(null);
+      setAttemptCount(0);
+    }
+  }, [blockedUntil, countdown]);
+  
+  // Função para verificar se está bloqueado
+  const isBlocked = useCallback(() => {
+    return blockedUntil !== null && new Date() < blockedUntil;
+  }, [blockedUntil]);
+  
+  // Função para registrar tentativa
+  const registerAttempt = useCallback(() => {
+    const newCount = attemptCount + 1;
+    setAttemptCount(newCount);
+    
+    // Após 3 tentativas, bloquear por 30 segundos
+    if (newCount >= 3) {
+      const blockDuration = 30;
+      setBlockedUntil(new Date(Date.now() + blockDuration * 1000));
+      setCountdown(blockDuration);
+      toast.error(`⏱️ Muitas tentativas. Aguarde ${blockDuration} segundos.`);
+    }
+  }, [attemptCount]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (previewMode) {
       toast.info('Modo preview - configure o Supabase para autenticação real');
+      return;
+    }
+    
+    // Verificar se está bloqueado client-side
+    if (isBlocked()) {
+      toast.error(`⏱️ Aguarde ${countdown} segundos antes de tentar novamente.`);
       return;
     }
     
@@ -49,6 +96,10 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
           });
         } else {
           toast.success('✅ Conta criada e autenticado com sucesso!');
+          // Resetar contador de tentativas após sucesso
+          setAttemptCount(0);
+          setBlockedUntil(null);
+          setCountdown(0);
           // Callback paranotificar sucesso
           if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
             hasCalledOnLoginSuccess.current = true;
@@ -60,10 +111,14 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
           email,
           password,
         });
-        
+
         if (error) throw error;
-        
+
         toast.success('✅ Login realizado com sucesso!');
+        // Resetar contador de tentativas após sucesso
+        setAttemptCount(0);
+        setBlockedUntil(null);
+        setCountdown(0);
         // Callback para notificar sucesso
         if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
           hasCalledOnLoginSuccess.current = true;
@@ -71,6 +126,9 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
         }
       }
     } catch (error: any) {
+      // Registrar tentativa para rate limiting client-side
+      registerAttempt();
+      
       let errorMessage = error.message || 'Erro ao autenticar';
       
       if (error.message?.includes('Invalid login credentials')) {
@@ -244,13 +302,18 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isBlocked()}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-3 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
                   {isSignUp ? 'CRIANDO CONTA...' : 'ENTRANDO...'}
+                </>
+              ) : isBlocked() ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  AGUARDE {countdown}s...
                 </>
               ) : (
                 <>
