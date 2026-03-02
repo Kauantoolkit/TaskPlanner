@@ -9,6 +9,8 @@ export function LogoutButton() {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       toast.success('Logout realizado!');
+      // Recarregar a página para atualizar o estado de auth
+      window.location.reload();
     } catch (error: any) {
       toast.error('Erro ao fazer logout');
     }
