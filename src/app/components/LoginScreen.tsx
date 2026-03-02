@@ -81,8 +81,16 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
         errorMessage = 'Este email já está cadastrado. Tente fazer login.';
       } else if (error.message?.includes('Password should be at least')) {
         errorMessage = 'A senha deve ter pelo menos 6 caracteres';
-      } else if (error.status === 429 || error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
-        errorMessage = '⏱️ Muitas tentativas. Aguarde 5-10 minutos e tente novamente.';
+      } else if (
+        error.status === 429 || 
+        error.code === '429' ||
+        String(error.status).includes('429') ||
+        error.message?.includes('429') ||
+        error.message?.includes('Too Many Requests') ||
+        error.message?.toLowerCase().includes('rate limit') ||
+        error.message?.toLowerCase().includes('many requests')
+      ) {
+        errorMessage = '⏱️ Limite atingido. O Supabase bloqueou temporariamente (429). Aguarde 5-15 minutos e tente novamente. Isso acontece quando há muitas tentativas de cadastro/login.';
       } else if (error.message?.includes('rate limit')) {
         errorMessage = '⏱️ Limite de requisições atingido. Aguarde alguns minutos.';
       }
