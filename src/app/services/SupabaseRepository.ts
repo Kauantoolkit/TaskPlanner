@@ -123,10 +123,10 @@ export class SupabaseRepository implements IDataRepository {
     const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
     console.log('[SupabaseRepository] getTasks: workspaceId =', workspaceId, 'memberId =', memberId);
 
-    // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
+// Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
       .from('tasks')
-      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, recurring_type, recurring_day, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
+      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, recurring_type, recurring_day, scheduled_time, estimated_duration_minutes, yellow_alert_minutes, started_at, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
@@ -155,7 +155,11 @@ export class SupabaseRepository implements IDataRepository {
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
       recurringType: row.recurring_type,
-      recurringDay: row.recurring_day,
+recurringDay: row.recurring_day,
+      scheduledTime: row.scheduled_time,
+      estimatedDurationMinutes: row.estimated_duration_minutes,
+      yellowAlertMinutes: row.yellow_alert_minutes,
+      startedAt: row.started_at,
       assignedToId: row.assigned_to_id,
       createdById: row.created_by_id,
       workspaceId: row.workspace_id,
@@ -180,8 +184,12 @@ export class SupabaseRepository implements IDataRepository {
         category: task.categoryId || null, // Banco usa 'category' como texto
         is_delivery: task.isDelivery || false,
         delivery_date: task.deliveryDate || null,
-        recurring_type: task.recurringType || null,
+recurring_type: task.recurringType || null,
         recurring_day: task.recurringDay !== undefined ? task.recurringDay : null,
+        scheduled_time: task.scheduledTime || null,
+        estimated_duration_minutes: task.estimatedDurationMinutes || null,
+        yellow_alert_minutes: task.yellowAlertMinutes || null,
+        started_at: task.startedAt || null,
       })
       .select()
       .single();
@@ -205,7 +213,11 @@ export class SupabaseRepository implements IDataRepository {
     if (updates.isDelivery !== undefined) updateData.is_delivery = updates.isDelivery;
     if (updates.deliveryDate !== undefined) updateData.delivery_date = updates.deliveryDate;
     if (updates.recurringType !== undefined) updateData.recurring_type = updates.recurringType;
-    if (updates.recurringDay !== undefined) updateData.recurring_day = updates.recurringDay;
+if (updates.recurringDay !== undefined) updateData.recurring_day = updates.recurringDay;
+    if (updates.scheduledTime !== undefined) updateData.scheduled_time = updates.scheduledTime;
+    if (updates.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
+    if (updates.yellowAlertMinutes !== undefined) updateData.yellow_alert_minutes = updates.yellowAlertMinutes;
+    if (updates.startedAt !== undefined) updateData.started_at = updates.startedAt;
 
     const { data, error } = await supabase
       .from('tasks')

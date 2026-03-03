@@ -44,6 +44,12 @@ export interface Task {
   recurringType?: 'daily' | 'weekly'; // 'daily' = todos os dias (same as isPermanent), 'weekly' = dia específico da semana
   recurringDay?: number; // 0 = Domingo, 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado
   
+  // Sistema de horário e alertas
+  scheduledTime?: string; // Horário de início da tarefa (HH:mm)
+  estimatedDurationMinutes?: number; // Duração estimada em minutos
+  yellowAlertMinutes?: number; // Minutos antes do prazo para alerta amarelo
+  startedAt?: string; // Quando a tarefa foi iniciada (ISO timestamp)
+  
   // Novo: Campos colaborativos
   assignedToId: string; // ID do usuário responsável
   createdById: string; // ID de quem criou

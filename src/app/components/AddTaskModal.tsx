@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Repeat, Plus, Tag, Target, Save } from 'lucide-react';
+import { X, Calendar, Repeat, Plus, Tag, Target, Save, Clock } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { clsx, type ClassValue } from 'clsx';
@@ -20,17 +20,21 @@ interface Task {
   deliveryDate?: string;
   recurringType?: 'daily' | 'weekly';
   recurringDay?: number;
+  scheduledTime?: string;
+  estimatedDurationMinutes?: number;
+  yellowAlertMinutes?: number;
+  startedAt?: string;
 }
 
 type TaskType = 'unique' | 'permanent' | 'delivery' | 'weekly';
 
 interface AddTaskModalProps {
   onClose: () => void;
-  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => void;
+  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
   selectedDate: Date;
   categories: Category[];
   editingTask?: Task;
-  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => void;
+  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
 }
 
 const DAYS_OF_WEEK = [
@@ -43,6 +47,9 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Sábado', short: 'Sáb' },
 ];
 
+// Horário padrão de fim de dia (18:00)
+const DEFAULT_END_OF_DAY_HOUR = 18;
+
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, selectedDate, categories, editingTask, onUpdate }) => {
   const [text, setText] = useState('');
   const [isPermanent, setIsPermanent] = useState(false);
@@ -50,9 +57,32 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
   const [taskType, setTaskType] = useState<TaskType>('unique');
   const [deliveryDate, setDeliveryDate] = useState(format(addDays(selectedDate, 7), 'yyyy-MM-dd'));
   const [recurringDay, setRecurringDay] = useState<number>(1); // Default: Segunda-feira
+  
+  // Novos campos de horário
+  const [scheduledTime, setScheduledTime] = useState<string>('09:00');
+  const [estimatedDurationMinutes, setEstimatedDurationMinutes] = useState<number>(240);
+  const [yellowAlertMinutes, setYellowAlertMinutes] = useState<number>(120);
 
   // Get current day of week (0-6, 0 = Sunday)
   const currentDayOfWeek = selectedDate.getDay();
+
+  // Calculate default duration based on scheduled time (metade do tempo até 18:00)
+  const calculateDefaultDuration = (time: string) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    const scheduledMinutes = hours * 60 + minutes;
+    const endOfDayMinutes = DEFAULT_END_OF_DAY_HOUR * 60;
+    const availableMinutes = endOfDayMinutes - scheduledMinutes;
+    // Metade do tempo disponível
+    return Math.max(30, Math.floor(availableMinutes / 2));
+  };
+
+  // Update duration when scheduled time changes
+  useEffect(() => {
+    const newDuration = calculateDefaultDuration(scheduledTime);
+    setEstimatedDurationMinutes(newDuration);
+    // Alerta amarelo = metade da duração
+    setYellowAlertMinutes(Math.max(15, Math.floor(newDuration / 2)));
+  }, [scheduledTime]);
 
   // Initialize with editing task if provided
   useEffect(() => {
@@ -70,6 +100,17 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
         setRecurringDay(editingTask.recurringDay);
       } else {
         setTaskType('unique');
+      }
+      
+      // Initialize time fields
+      if (editingTask.scheduledTime) {
+        setScheduledTime(editingTask.scheduledTime);
+      }
+      if (editingTask.estimatedDurationMinutes) {
+        setEstimatedDurationMinutes(editingTask.estimatedDurationMinutes);
+      }
+      if (editingTask.yellowAlertMinutes) {
+        setYellowAlertMinutes(editingTask.yellowAlertMinutes);
       }
     }
   }, [editingTask, selectedDate]);
@@ -90,7 +131,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
       isDelivery: taskType === 'delivery',
       deliveryDate: taskType === 'delivery' ? deliveryDate : undefined,
       recurringType: recurringTypeValue,
-      recurringDay: taskType === 'weekly' ? recurringDay : undefined
+      recurringDay: taskType === 'weekly' ? recurringDay : undefined,
+      scheduledTime,
+      estimatedDurationMinutes,
+      yellowAlertMinutes
     };
     
     if (editingTask && onUpdate) {
@@ -101,6 +145,15 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
     
     setText('');
     onClose();
+  };
+
+  // Helper to format minutes to readable string
+  const formatMinutesToReadable = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours === 0) return `${mins}min`;
+    if (mins === 0) return `${hours}h`;
+    return `${hours}h ${mins}min`;
   };
 
   return (
@@ -271,6 +324,60 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                   </p>
                 </div>
               )}
+
+              {/* Seção de Horário */}
+              <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+                <label className="text-xs uppercase tracking-widest font-black text-gray-400 mb-3 block px-1 flex items-center gap-2">
+                  <Clock size={14} />
+                  Programação de Tempo
+                </label>
+                
+                <div className="space-y-4">
+                  {/* Horário de Início */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 block px-1">Horário de Início</label>
+                    <input
+                      type="time"
+                      value={scheduledTime}
+                      onChange={(e) => setScheduledTime(e.target.value)}
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-gray-950 outline-none rounded-xl px-4 py-3 text-base font-bold text-gray-700 dark:text-gray-200 transition-all"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1 px-1">Quando você vai começar esta tarefa</p>
+                  </div>
+
+                  {/* Duração Estimada */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 block px-1">Duração Estimada (minutos)</label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="720"
+                      step="15"
+                      value={estimatedDurationMinutes}
+                      onChange={(e) => setEstimatedDurationMinutes(parseInt(e.target.value) || 60)}
+                      className="w-full bg-gray-50 dark:bg-gray-800 border-2 border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-gray-950 outline-none rounded-xl px-4 py-3 text-base font-bold text-gray-700 dark:text-gray-200 transition-all"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1 px-1">Tempo estimado: {formatMinutesToReadable(estimatedDurationMinutes)}</p>
+                  </div>
+
+                  {/* Alerta Amarelo */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 block px-1">Alertar amarelo antes (minutos)</label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="360"
+                      step="5"
+                      value={yellowAlertMinutes}
+                      onChange={(e) => setYellowAlertMinutes(parseInt(e.target.value) || 30)}
+                      className="w-full bg-yellow-50 dark:bg-yellow-950/20 border-2 border-transparent focus:border-yellow-500 focus:bg-white dark:focus:bg-gray-950 outline-none rounded-xl px-4 py-3 text-base font-bold text-gray-700 dark:text-gray-200 transition-all"
+                    />
+                    <p className="text-[10px] text-yellow-600 dark:text-yellow-400 mt-1 px-1">
+                      Ficará 🟡 amarelo faltando {formatMinutesToReadable(yellowAlertMinutes)} para o prazo
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="flex items-center gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl">
                 <Calendar size={18} className="text-gray-400" />
