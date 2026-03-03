@@ -126,7 +126,7 @@ export class SupabaseRepository implements IDataRepository {
 // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
       .from('tasks')
-      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, recurring_type, recurring_day, scheduled_time, estimated_duration_minutes, yellow_alert_minutes, started_at, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
+      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, recurring_type, recurring_days, scheduled_time, estimated_duration_minutes, yellow_alert_minutes, started_at, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
@@ -155,7 +155,7 @@ export class SupabaseRepository implements IDataRepository {
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
       recurringType: row.recurring_type,
-recurringDay: row.recurring_day,
+      recurringDays: row.recurring_days || [],
       scheduledTime: row.scheduled_time,
       estimatedDurationMinutes: row.estimated_duration_minutes,
       yellowAlertMinutes: row.yellow_alert_minutes,
@@ -184,8 +184,8 @@ recurringDay: row.recurring_day,
         category: task.categoryId || null, // Banco usa 'category' como texto
         is_delivery: task.isDelivery || false,
         delivery_date: task.deliveryDate || null,
-recurring_type: task.recurringType || null,
-        recurring_day: task.recurringDay !== undefined ? task.recurringDay : null,
+        recurring_type: task.recurringType || null,
+        recurring_days: task.recurringDays ? JSON.stringify(task.recurringDays) : null,
         scheduled_time: task.scheduledTime || null,
         estimated_duration_minutes: task.estimatedDurationMinutes || null,
         yellow_alert_minutes: task.yellowAlertMinutes || null,
@@ -213,7 +213,7 @@ recurring_type: task.recurringType || null,
     if (updates.isDelivery !== undefined) updateData.is_delivery = updates.isDelivery;
     if (updates.deliveryDate !== undefined) updateData.delivery_date = updates.deliveryDate;
     if (updates.recurringType !== undefined) updateData.recurring_type = updates.recurringType;
-if (updates.recurringDay !== undefined) updateData.recurring_day = updates.recurringDay;
+    if (updates.recurringDays !== undefined) updateData.recurring_days = updates.recurringDays ? JSON.stringify(updates.recurringDays) : null;
     if (updates.scheduledTime !== undefined) updateData.scheduled_time = updates.scheduledTime;
     if (updates.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
     if (updates.yellowAlertMinutes !== undefined) updateData.yellow_alert_minutes = updates.yellowAlertMinutes;
@@ -239,7 +239,7 @@ if (updates.recurringDay !== undefined) updateData.recurring_day = updates.recur
       isDelivery: data.is_delivery,
       deliveryDate: data.delivery_date,
       recurringType: data.recurring_type,
-      recurringDay: data.recurring_day,
+      recurringDays: data.recurring_days || [],
       assignedToId: data.assigned_to_id,
       createdById: data.created_by_id,
       workspaceId: data.workspace_id,

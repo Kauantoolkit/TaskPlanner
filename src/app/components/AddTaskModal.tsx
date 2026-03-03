@@ -19,7 +19,7 @@ interface Task {
   isDelivery?: boolean;
   deliveryDate?: string;
   recurringType?: 'daily' | 'weekly';
-  recurringDay?: number;
+  recurringDays?: number[];
   scheduledTime?: string;
   estimatedDurationMinutes?: number;
   yellowAlertMinutes?: number;
@@ -30,11 +30,11 @@ type TaskType = 'unique' | 'permanent' | 'delivery' | 'weekly';
 
 interface AddTaskModalProps {
   onClose: () => void;
-  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
+  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
   selectedDate: Date;
   categories: Category[];
   editingTask?: Task;
-  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
+  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => void;
 }
 
 const DAYS_OF_WEEK = [
@@ -56,7 +56,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
   const [taskType, setTaskType] = useState<TaskType>('unique');
   const [deliveryDate, setDeliveryDate] = useState(format(addDays(selectedDate, 7), 'yyyy-MM-dd'));
-  const [recurringDay, setRecurringDay] = useState<number>(1); // Default: Segunda-feira
+  const [recurringDays, setRecurringDays] = useState<number[]>([1]); // Default: Segunda-feira
   
   // Novos campos de horário
   const [scheduledTime, setScheduledTime] = useState<string>('09:00');
@@ -95,9 +95,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
         setDeliveryDate(editingTask.deliveryDate || format(addDays(selectedDate, 7), 'yyyy-MM-dd'));
       } else if (editingTask.isPermanent) {
         setTaskType('permanent');
-      } else if (editingTask.recurringType === 'weekly' && editingTask.recurringDay !== undefined) {
+      } else if (editingTask.recurringType === 'weekly' && editingTask.recurringDays && editingTask.recurringDays.length > 0) {
         setTaskType('weekly');
-        setRecurringDay(editingTask.recurringDay);
+        setRecurringDays(editingTask.recurringDays);
       } else {
         setTaskType('unique');
       }
@@ -131,7 +131,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
       isDelivery: taskType === 'delivery',
       deliveryDate: taskType === 'delivery' ? deliveryDate : undefined,
       recurringType: recurringTypeValue,
-      recurringDay: taskType === 'weekly' ? recurringDay : undefined,
+      recurringDays: taskType === 'weekly' ? recurringDays : undefined,
       scheduledTime,
       estimatedDurationMinutes,
       yellowAlertMinutes
@@ -154,6 +154,14 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
     if (hours === 0) return `${mins}min`;
     if (mins === 0) return `${hours}h`;
     return `${hours}h ${mins}min`;
+  };
+
+  // Helper to get day labels for display
+  const getRecurringDaysLabel = () => {
+    if (recurringDays.length === 1) {
+      return DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label.toLowerCase() || '';
+    }
+    return recurringDays.map(d => DAYS_OF_WEEK.find(day => day.value === d)?.short.toLowerCase()).join(', ');
   };
 
   return (
@@ -277,7 +285,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                   <Repeat size={24} strokeWidth={2.5} className={cn(taskType === 'weekly' && "rotate-90")} />
                   <div className="text-center">
                     <p className="text-sm font-black">Semanal</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest mt-0.5">Dia específico</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mt-0.5">Dias específicos</p>
                   </div>
                 </button>
 
@@ -301,16 +309,25 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
 
               {taskType === 'weekly' && (
                 <div>
-                  <label className="text-xs uppercase tracking-widest font-black text-gray-400 mb-2 block px-1">Repetir toda</label>
+                  <label className="text-xs uppercase tracking-widest font-black text-gray-400 mb-2 block px-1">Repetir em</label>
                   <div className="grid grid-cols-7 gap-2">
                     {DAYS_OF_WEEK.map((day) => (
                       <button
                         key={day.value}
                         type="button"
-                        onClick={() => setRecurringDay(day.value)}
+                        onClick={() => {
+                          if (recurringDays.includes(day.value)) {
+                            // Don't allow removing if it's the last day selected
+                            if (recurringDays.length > 1) {
+                              setRecurringDays(recurringDays.filter(d => d !== day.value));
+                            }
+                          } else {
+                            setRecurringDays([...recurringDays, day.value].sort());
+                          }
+                        }}
                         className={cn(
                           "flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all",
-                          recurringDay === day.value
+                          recurringDays.includes(day.value)
                             ? "bg-purple-50 dark:bg-purple-950/30 border-purple-500 text-purple-600"
                             : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
                         )}
@@ -320,7 +337,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-2 px-1">
-                    Esta tarefa aparecerá toda {DAYS_OF_WEEK.find(d => d.value === recurringDay)?.label.toLowerCase()}
+                    {recurringDays.length === 1 
+                      ? `Esta tarefa aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label.toLowerCase()}`
+                      : `Esta tarefa aparecerá ${getRecurringDaysLabel()}`
+                    }
                   </p>
                 </div>
               )}
@@ -382,8 +402,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
               <div className="flex items-center gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl">
                 <Calendar size={18} className="text-gray-400" />
                 <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                  {taskType === 'weekly' 
-                    ? `Aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDay)?.label}`
+                  {taskType === 'weekly'
+                    ? recurringDays.length === 1
+                      ? `Aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label}`
+                      : `Aparecerá ${getRecurringDaysLabel()}`
                     : `Agendado para: ${format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}`
                   }
                 </span>

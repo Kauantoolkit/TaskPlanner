@@ -41,8 +41,8 @@ export interface Task {
   deliveryDate?: string; // Delivery deadline date (YYYY-MM-DD)
   
   // Recorrência semanal
-  recurringType?: 'daily' | 'weekly'; // 'daily' = todos os dias (same as isPermanent), 'weekly' = dia específico da semana
-  recurringDay?: number; // 0 = Domingo, 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado
+  recurringType?: 'daily' | 'weekly'; // 'daily' = todos os dias (same as isPermanent), 'weekly' = dia(s) específico(s) da semana
+  recurringDays?: number[]; // Array de dias da semana: 0 = Domingo, 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado
   
   // Sistema de horário e alertas
   scheduledTime?: string; // Horário de início da tarefa (HH:mm)

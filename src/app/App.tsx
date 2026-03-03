@@ -141,9 +141,9 @@ function AppContent() {
       // Task permanente (todos os dias)
       if (task.isPermanent) return true;
       
-      // Task semanal - aparece no dia da semana configurado
-      if (task.recurringType === 'weekly' && task.recurringDay !== undefined) {
-        return task.recurringDay === currentDayOfWeek;
+      // Task semanal - aparece no(s) dia(s) da semana configurado(s)
+      if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
+        return task.recurringDays.includes(currentDayOfWeek);
       }
       
       // Task de entrega - aparece até a data final
@@ -182,7 +182,7 @@ function AppContent() {
   }
 
   // Handlers
-  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => {
+  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[] }) => {
     try {
       await addTask({
         text: newTask.text,
@@ -194,7 +194,7 @@ function AppContent() {
         isDelivery: newTask.isDelivery,
         deliveryDate: newTask.deliveryDate,
         recurringType: newTask.recurringType,
-        recurringDay: newTask.recurringDay,
+        recurringDays: newTask.recurringDays,
       });
       toast.success(newTask.isDelivery ? 'Entrega criada!' : newTask.recurringType === 'weekly' ? 'Tarefa semanal criada!' : 'Tarefa adicionada!');
     } catch (err) {
@@ -267,7 +267,7 @@ function AppContent() {
     }
   };
 
-  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => {
+  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[] }) => {
     try {
       await updateTask(id, {
         text: updatedData.text,
@@ -277,7 +277,7 @@ function AppContent() {
         isDelivery: updatedData.isDelivery,
         deliveryDate: updatedData.deliveryDate,
         recurringType: updatedData.recurringType,
-        recurringDay: updatedData.recurringDay
+        recurringDays: updatedData.recurringDays
       });
       toast.success('Tarefa atualizada!');
     } catch (err) {
