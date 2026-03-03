@@ -129,26 +129,41 @@ function AppContent() {
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
+  // Get current day of week (0 = Sunday, 1 = Monday, etc.)
+  const currentDayOfWeek = selectedDate.getDay();
+
   // useMemo fixos
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
+      // Task permanente (todos os dias)
       if (task.isPermanent) return true;
       
+      // Task semanal - aparece no dia da semana configurado
+      if (task.recurringType === 'weekly' && task.recurringDay !== undefined) {
+        return task.recurringDay === currentDayOfWeek;
+      }
+      
+      // Task de entrega - aparece até a data final
       if (task.isDelivery && task.deliveryDate) {
         return formattedSelectedDate <= task.deliveryDate;
       }
       
+      // Task única - aparece apenas na data específica
       return task.date === formattedSelectedDate;
     });
-  }, [tasks, formattedSelectedDate, searchQuery]);
+  }, [tasks, formattedSelectedDate, searchQuery, currentDayOfWeek]);
 
   const stats = useMemo(() => {
     const dailyTasks = filteredTasks;
     const completedCount = dailyTasks.filter(task => {
       if (task.isPermanent) {
+        return task.completedDates.includes(formattedSelectedDate);
+      }
+      // Tasks semanais também usam completedDates (como permanentes)
+      if (task.recurringType === 'weekly') {
         return task.completedDates.includes(formattedSelectedDate);
       }
       return task.completed;
@@ -167,19 +182,21 @@ function AppContent() {
   }
 
   // Handlers
-  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => {
     try {
       await addTask({
         text: newTask.text,
         isPermanent: newTask.isPermanent,
         completedDates: [],
-        date: newTask.isPermanent || newTask.isDelivery ? undefined : newTask.date,
+        date: newTask.isPermanent || newTask.isDelivery || newTask.recurringType === 'weekly' ? undefined : newTask.date,
         completed: false,
         categoryId: newTask.categoryId,
         isDelivery: newTask.isDelivery,
         deliveryDate: newTask.deliveryDate,
+        recurringType: newTask.recurringType,
+        recurringDay: newTask.recurringDay,
       });
-      toast.success(newTask.isDelivery ? 'Entrega criada!' : 'Tarefa adicionada!');
+      toast.success(newTask.isDelivery ? 'Entrega criada!' : newTask.recurringType === 'weekly' ? 'Tarefa semanal criada!' : 'Tarefa adicionada!');
     } catch (err) {
       toast.error('Erro ao adicionar tarefa');
     }
@@ -190,7 +207,8 @@ function AppContent() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
-    if (task.isPermanent) {
+    // Tasks permanentes e semanais usam completedDates
+    if (task.isPermanent || task.recurringType === 'weekly') {
       const isCompleted = task.completedDates.includes(targetDate);
       const newCompletedDates = isCompleted
         ? task.completedDates.filter(d => d !== targetDate)
@@ -249,15 +267,17 @@ function AppContent() {
     }
   };
 
-  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => {
+  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => {
     try {
       await updateTask(id, {
         text: updatedData.text,
         isPermanent: updatedData.isPermanent,
-        date: updatedData.isPermanent || updatedData.isDelivery ? undefined : updatedData.date,
+        date: updatedData.isPermanent || updatedData.isDelivery || updatedData.recurringType === 'weekly' ? undefined : updatedData.date,
         categoryId: updatedData.categoryId,
         isDelivery: updatedData.isDelivery,
-        deliveryDate: updatedData.deliveryDate
+        deliveryDate: updatedData.deliveryDate,
+        recurringType: updatedData.recurringType,
+        recurringDay: updatedData.recurringDay
       });
       toast.success('Tarefa atualizada!');
     } catch (err) {
@@ -418,6 +438,34 @@ function AppContent() {
 
                     <div>
                       <div className="flex items-center gap-2 mb-4 px-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Recorrente Semanal</h3>
+                      </div>
+                      <div className="grid gap-3">
+                        {filteredTasks.filter(t => t.recurringType === 'weekly').length > 0 ? (
+                          filteredTasks
+                            .filter(t => t.recurringType === 'weekly')
+                            .map(task => (
+                              <TaskItem
+                                key={task.id}
+                                task={{
+                                  ...task,
+                                  completed: task.completedDates.includes(formattedSelectedDate)
+                                }}
+                                category={categories.find(c => c.id === task.categoryId)}
+                                onToggle={handleToggleTask}
+                                onDelete={handleDeleteTask}
+                                onEdit={handleEditTask}
+                              />
+                            ))
+                        ) : (
+                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa semanal.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-4 px-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                         <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Rotina Permanente</h3>
                       </div>
@@ -450,9 +498,9 @@ function AppContent() {
                         <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Tarefas do Dia</h3>
                       </div>
                       <div className="grid gap-3">
-                        {filteredTasks.filter(t => !t.isPermanent && !t.isDelivery).length > 0 ? (
+                        {filteredTasks.filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly').length > 0 ? (
                           filteredTasks
-                            .filter(t => !t.isPermanent && !t.isDelivery)
+                            .filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly')
                             .map(task => (
                               <TaskItem
                                 key={task.id}

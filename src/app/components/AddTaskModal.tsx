@@ -18,23 +18,41 @@ interface Task {
   categoryId?: string;
   isDelivery?: boolean;
   deliveryDate?: string;
+  recurringType?: 'daily' | 'weekly';
+  recurringDay?: number;
 }
+
+type TaskType = 'unique' | 'permanent' | 'delivery' | 'weekly';
 
 interface AddTaskModalProps {
   onClose: () => void;
-  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => void;
+  onAdd: (task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => void;
   selectedDate: Date;
   categories: Category[];
   editingTask?: Task;
-  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string }) => void;
+  onUpdate?: (id: string, task: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDay?: number }) => void;
 }
+
+const DAYS_OF_WEEK = [
+  { value: 0, label: 'Domingo', short: 'Dom' },
+  { value: 1, label: 'Segunda', short: 'Seg' },
+  { value: 2, label: 'Terça', short: 'Ter' },
+  { value: 3, label: 'Quarta', short: 'Qua' },
+  { value: 4, label: 'Quinta', short: 'Qui' },
+  { value: 5, label: 'Sexta', short: 'Sex' },
+  { value: 6, label: 'Sábado', short: 'Sáb' },
+];
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, selectedDate, categories, editingTask, onUpdate }) => {
   const [text, setText] = useState('');
   const [isPermanent, setIsPermanent] = useState(false);
   const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
-  const [taskType, setTaskType] = useState<'unique' | 'permanent' | 'delivery'>('unique');
+  const [taskType, setTaskType] = useState<TaskType>('unique');
   const [deliveryDate, setDeliveryDate] = useState(format(addDays(selectedDate, 7), 'yyyy-MM-dd'));
+  const [recurringDay, setRecurringDay] = useState<number>(1); // Default: Segunda-feira
+
+  // Get current day of week (0-6, 0 = Sunday)
+  const currentDayOfWeek = selectedDate.getDay();
 
   // Initialize with editing task if provided
   useEffect(() => {
@@ -47,6 +65,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
         setDeliveryDate(editingTask.deliveryDate || format(addDays(selectedDate, 7), 'yyyy-MM-dd'));
       } else if (editingTask.isPermanent) {
         setTaskType('permanent');
+      } else if (editingTask.recurringType === 'weekly' && editingTask.recurringDay !== undefined) {
+        setTaskType('weekly');
+        setRecurringDay(editingTask.recurringDay);
       } else {
         setTaskType('unique');
       }
@@ -56,6 +77,10 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
+
+    const recurringTypeValue: 'daily' | 'weekly' | undefined = 
+      taskType === 'weekly' ? 'weekly' : 
+      taskType === 'permanent' ? 'daily' : undefined;
     
     const taskData = {
       text,
@@ -63,7 +88,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
       date: taskType === 'unique' ? format(selectedDate, 'yyyy-MM-dd') : undefined,
       categoryId,
       isDelivery: taskType === 'delivery',
-      deliveryDate: taskType === 'delivery' ? deliveryDate : undefined
+      deliveryDate: taskType === 'delivery' ? deliveryDate : undefined,
+      recurringType: recurringTypeValue,
+      recurringDay: taskType === 'weekly' ? recurringDay : undefined
     };
     
     if (editingTask && onUpdate) {
@@ -105,7 +132,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                       ? 'Ex: Entregar projeto final do curso' 
                       : taskType === 'permanent' 
                         ? 'Ex: Beber 2L de água' 
-                        : 'Ex: Reunião com cliente'
+                        : taskType === 'weekly'
+                          ? 'Ex: Aula de inglês toda segunda'
+                          : 'Ex: Reunião com cliente'
                   }
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -184,6 +213,23 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
 
                 <button
                   type="button"
+                  onClick={() => setTaskType('weekly')}
+                  className={cn(
+                    "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
+                    taskType === 'weekly' 
+                      ? "bg-purple-50/50 dark:bg-purple-950/20 border-purple-500 text-purple-600" 
+                      : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
+                  )}
+                >
+                  <Repeat size={24} strokeWidth={2.5} className={cn(taskType === 'weekly' && "rotate-90")} />
+                  <div className="text-center">
+                    <p className="text-sm font-black">Semanal</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mt-0.5">Dia específico</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setTaskType('delivery')}
                   className={cn(
                     "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
@@ -200,10 +246,39 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                 </button>
               </div>
 
+              {taskType === 'weekly' && (
+                <div>
+                  <label className="text-xs uppercase tracking-widest font-black text-gray-400 mb-2 block px-1">Repetir toda</label>
+                  <div className="grid grid-cols-7 gap-2">
+                    {DAYS_OF_WEEK.map((day) => (
+                      <button
+                        key={day.value}
+                        type="button"
+                        onClick={() => setRecurringDay(day.value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all",
+                          recurringDay === day.value
+                            ? "bg-purple-50 dark:bg-purple-950/30 border-purple-500 text-purple-600"
+                            : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
+                        )}
+                      >
+                        <span className="text-xs font-black">{day.short}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 px-1">
+                    Esta tarefa aparecerá toda {DAYS_OF_WEEK.find(d => d.value === recurringDay)?.label.toLowerCase()}
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl">
                 <Calendar size={18} className="text-gray-400" />
                 <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                  Agendado para: {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                  {taskType === 'weekly' 
+                    ? `Aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDay)?.label}`
+                    : `Agendado para: ${format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}`
+                  }
                 </span>
               </div>
 

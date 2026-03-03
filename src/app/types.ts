@@ -40,6 +40,10 @@ export interface Task {
   isDelivery?: boolean; // For delivery/deadline tasks
   deliveryDate?: string; // Delivery deadline date (YYYY-MM-DD)
   
+  // Recorrência semanal
+  recurringType?: 'daily' | 'weekly'; // 'daily' = todos os dias (same as isPermanent), 'weekly' = dia específico da semana
+  recurringDay?: number; // 0 = Domingo, 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado
+  
   // Novo: Campos colaborativos
   assignedToId: string; // ID do usuário responsável
   createdById: string; // ID de quem criou
