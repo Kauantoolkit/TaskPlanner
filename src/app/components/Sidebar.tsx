@@ -56,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 h-screen bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col shrink-0 transition-colors">
+    <aside className="w-80 h-[100dvh] bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 flex flex-col shrink-0 transition-colors">
       <div className="p-4 md:p-8 pb-4 flex items-center justify-between">
         <h1 className="text-xl md:text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
           <ListTodo size={24} className="md:w-7" strokeWidth={3} /> <span className="hidden md:inline">Planner</span>
@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 md:px-6 py-2 md:py-4 space-y-6 md:space-y-8">
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-6 py-2 md:py-4 space-y-6 md:space-y-8">
         <section>
           <h2 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400 dark:text-gray-500 mb-3 md:mb-4 px-2">Navegação</h2>
           <div className="space-y-1">
@@ -191,17 +191,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </section>
       </div>
 
-      <div className="p-3 md:p-6 pt-2 space-y-2">
+      <div className="p-3 md:p-6 pt-2 space-y-2 mt-auto">
         <button 
           onClick={onAddTask}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all active:scale-98"
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 md:py-3 rounded-xl md:rounded-2xl transition-all active:scale-98"
         >
           <PlusCircle size={18} className="md:w-5" /> <span className="text-sm md:text-base">NOVA TAREFA</span>
         </button>
 
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black py-3 md:py-4 rounded-xl md:rounded-2xl transition-all active:scale-98"
+          className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-black py-2.5 md:py-3 rounded-xl md:rounded-2xl transition-all active:scale-98"
         >
           <LogOut size={18} className="md:w-5" /> <span className="text-sm md:text-base">SAIR</span>
         </button>

@@ -271,7 +271,7 @@ function AppContent() {
   };
 
   return (
-    <div className={`flex h-screen bg-[#fafafa] text-gray-900 font-sans selection:bg-blue-100 ${settings.darkMode ? 'dark' : ''}`}>
+    <div className={`flex h-[100dvh] bg-[#fafafa] text-gray-900 font-sans selection:bg-blue-100 ${settings.darkMode ? 'dark' : ''}`}>
       <Toaster position="top-right" />
       
       <div className="flex h-full w-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
