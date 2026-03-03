@@ -126,7 +126,7 @@ export class SupabaseRepository implements IDataRepository {
     // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
       .from('tasks')
-      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
+      .select('id, text, is_permanent, completed_dates, date, completed, category, is_delivery, delivery_date, recurring_type, recurring_day, assigned_to_id, created_by_id, workspace_id, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
 
@@ -154,6 +154,8 @@ export class SupabaseRepository implements IDataRepository {
       categoryId: row.category,
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
+      recurringType: row.recurring_type,
+      recurringDay: row.recurring_day,
       assignedToId: row.assigned_to_id,
       createdById: row.created_by_id,
       workspaceId: row.workspace_id,
@@ -178,6 +180,8 @@ export class SupabaseRepository implements IDataRepository {
         category: task.categoryId || null, // Banco usa 'category' como texto
         is_delivery: task.isDelivery || false,
         delivery_date: task.deliveryDate || null,
+        recurring_type: task.recurringType || null,
+        recurring_day: task.recurringDay !== undefined ? task.recurringDay : null,
       })
       .select()
       .single();
@@ -200,6 +204,8 @@ export class SupabaseRepository implements IDataRepository {
     if (updates.categoryId !== undefined) updateData.category = updates.categoryId; // Banco usa 'category'
     if (updates.isDelivery !== undefined) updateData.is_delivery = updates.isDelivery;
     if (updates.deliveryDate !== undefined) updateData.delivery_date = updates.deliveryDate;
+    if (updates.recurringType !== undefined) updateData.recurring_type = updates.recurringType;
+    if (updates.recurringDay !== undefined) updateData.recurring_day = updates.recurringDay;
 
     const { data, error } = await supabase
       .from('tasks')
@@ -220,6 +226,8 @@ export class SupabaseRepository implements IDataRepository {
       categoryId: data.category,
       isDelivery: data.is_delivery,
       deliveryDate: data.delivery_date,
+      recurringType: data.recurring_type,
+      recurringDay: data.recurring_day,
       assignedToId: data.assigned_to_id,
       createdById: data.created_by_id,
       workspaceId: data.workspace_id,
