@@ -15,13 +15,9 @@ export function LogoutButton() {
       if (error) throw error;
       
       toast.success('Logout realizado!');
-      
-      // Forçar navegação para a página atual ( limpa cache e força re-render)
-      window.location.href = window.location.href;
+      window.location.reload();
     } catch (error: any) {
-      // Em caso de erro, ainda assim tenta redirecionar
       console.error('Erro no logout:', error);
-      window.location.href = window.location.href;
     }
   };
 
