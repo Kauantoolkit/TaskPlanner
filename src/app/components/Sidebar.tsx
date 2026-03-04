@@ -47,11 +47,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return;
     }
 
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error('Erro ao sair');
-    } else {
-      toast.success('Saiu com sucesso');
+    try {
+      // Limpar dados locais primeiro
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast.error('Erro ao sair');
+      } else {
+        toast.success('Saiu com sucesso');
+        // Forçar navegação para atualizar o estado de auth
+        window.location.href = window.location.href;
+      }
+    } catch (err) {
+      // Em caso de erro, ainda assim tenta redirecionar
+      window.location.href = window.location.href;
     }
   };
 
