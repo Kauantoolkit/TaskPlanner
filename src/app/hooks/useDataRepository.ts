@@ -54,7 +54,7 @@ export function useDataRepository() {
       if (localCategories) setCategories(JSON.parse(localCategories));
       if (localSettings) setSettings(JSON.parse(localSettings));
     } catch (e) {
-      console.error('[useDataRepository] Erro ao carregar localStorage:', e);
+      // Silenciosamente ignora erros ao carregar localStorage
     }
   }, []);
 
@@ -65,7 +65,7 @@ export function useDataRepository() {
       localStorage.setItem('agenda-categories', JSON.stringify(categories));
       localStorage.setItem('agenda-settings', JSON.stringify(settings));
     } catch (e) {
-      console.error('[useDataRepository] Erro ao salvar localStorage:', e);
+      // Silenciosamente ignora erros ao salvar localStorage
     }
   }, [tasks, categories, settings]);
 
@@ -112,7 +112,7 @@ export function useDataRepository() {
 
         const results = await Promise.race([loadPromise, timeoutPromise]);
 
-        if (!cancelled && mounted) {
+if (!cancelled && mounted) {
           const [tasksData, categoriesData, settingsData] = results;
           setTasks(tasksData || []);
           setCategories(categoriesData || INITIAL_CATEGORIES);
@@ -123,7 +123,6 @@ export function useDataRepository() {
       } catch (err: unknown) {
         if (!cancelled && mounted) {
           const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
-          console.error('[useDataRepository] Erro ao carregar do Supabase:', errorMessage);
           // NÃO faz fallback para localStorage quando Supabase está configurado
           setError(errorMessage);
           setLoading(false);
@@ -162,7 +161,7 @@ export function useDataRepository() {
       try {
         await repository.createTask(newTask);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao criar task no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -175,7 +174,7 @@ export function useDataRepository() {
       try {
         await repository.updateTask(id, updates);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao atualizar task no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -188,7 +187,7 @@ export function useDataRepository() {
       try {
         await repository.deleteTask(id);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao deletar task no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -206,7 +205,7 @@ export function useDataRepository() {
       try {
         await repository.createCategory(newCategory);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao criar categoria no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -220,7 +219,7 @@ export function useDataRepository() {
       try {
         await repository.deleteCategory(id);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao deletar categoria no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -233,7 +232,7 @@ export function useDataRepository() {
       try {
         await repository.updateSettings(newSettings);
       } catch (err) {
-        console.error('[useDataRepository] Erro ao salvar settings no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);
@@ -248,7 +247,7 @@ export function useDataRepository() {
       try {
         await repository.clearAll();
       } catch (err) {
-        console.error('[useDataRepository] Erro ao limpar dados no Supabase:', err);
+        // Silenciosamente ignora erros
       }
     }
   }, [isSupabaseMode, loading, repository]);

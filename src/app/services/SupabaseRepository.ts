@@ -21,17 +21,13 @@ const INITIAL_SETTINGS: Settings = {
 export class SupabaseRepository implements IDataRepository {
   
   private async getUserId(): Promise<string> {
-    console.log('[SupabaseRepository] getUserId: Buscando usuário...');
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error) {
-      console.error('[SupabaseRepository] getUserId: Erro ao buscar usuário:', error);
       throw new Error('Erro ao buscar usuário: ' + error.message);
     }
     if (!user) {
-      console.error('[SupabaseRepository] getUserId: Usuário não encontrado');
       throw new Error('Usuário não autenticado');
     }
-    console.log('[SupabaseRepository] getUserId: Usuário encontrado:', user.id);
     return user.id;
   }
 
@@ -40,16 +36,12 @@ export class SupabaseRepository implements IDataRepository {
    * O primeiro login cria um workspace "Personal" automaticamente
    */
   private async getOrCreateUserWorkspace(): Promise<{ workspaceId: string; memberId: string }> {
-    console.log('[SupabaseRepository] getOrCreateUserWorkspace: Iniciando...');
     const userId = await this.getUserId();
-    console.log('[SupabaseRepository] getOrCreateUserWorkspace: userId =', userId);
     
     const { data: { user } } = await supabase.auth.getUser();
     const userEmail = user?.email || '';
-    console.log('[SupabaseRepository] getOrCreateUserWorkspace: userEmail =', userEmail);
 
     // Buscar workspaces do usuário
-    console.log('[SupabaseRepository] getOrCreateUserWorkspace: Buscando workspaces...');
     const { data: workspaces, error: wsError } = await supabase
       .from('workspaces')
       .select('id')
@@ -57,10 +49,8 @@ export class SupabaseRepository implements IDataRepository {
       .limit(1);
 
     if (wsError) {
-      console.error('[SupabaseRepository] getOrCreateUserWorkspace: Erro ao buscar workspaces:', wsError);
       throw wsError;
     }
-    console.log('[SupabaseRepository] getOrCreateUserWorkspace: workspaces =', workspaces);
 
     let workspaceId: string;
 
@@ -121,7 +111,6 @@ export class SupabaseRepository implements IDataRepository {
   // ===== TASKS =====
   async getTasks(): Promise<Task[]> {
     const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
-    console.log('[SupabaseRepository] getTasks: workspaceId =', workspaceId, 'memberId =', memberId);
 
 // Especificar colunas explicitamente ao invés de * (PostgREST pode bloquear *)
     const { data, error } = await supabase
@@ -131,7 +120,6 @@ export class SupabaseRepository implements IDataRepository {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[SupabaseRepository] getTasks: Erro ao buscar tasks:', error);
       // Fornecer mensagem de erro mais detalhada
       if (error.code === '42501') {
         throw new Error('Permissão negada. Execute o script SUPABASE_FIX_RLS_V2.sql no SQL Editor do Supabase.');
@@ -195,7 +183,6 @@ export class SupabaseRepository implements IDataRepository {
       .single();
 
     if (error) {
-      console.error('Erro ao criar task:', error);
       throw error;
     }
     return task;

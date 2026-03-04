@@ -6,13 +6,22 @@ import { toast } from 'sonner';
 export function LogoutButton() {
   const handleLogout = async () => {
     try {
+      // Limpar dados locais primeiro
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Fazer signOut no Supabase
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      
       toast.success('Logout realizado!');
-      // Recarregar a página para atualizar o estado de auth
-      window.location.reload();
+      
+      // Forçar navegação para a página atual ( limpa cache e força re-render)
+      window.location.href = window.location.href;
     } catch (error: any) {
-      toast.error('Erro ao fazer logout');
+      // Em caso de erro, ainda assim tenta redirecionar
+      console.error('Erro no logout:', error);
+      window.location.href = window.location.href;
     }
   };
 
