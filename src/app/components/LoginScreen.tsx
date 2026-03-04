@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { LogIn, Mail, Lock, UserPlus, Loader2, ListTodo, AlertCircle } from 'lucide-react';
+import { LogIn, Mail, Lock, UserPlus, Loader2, ListTodo, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LoginScreenProps {
@@ -13,7 +13,8 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [signUpSuccess, setSignUpSuccess] = useState(false);
+  const [successEmail, setSuccessEmail] = useState('');
   
   // Ref para evitar múltiplas verificações de sessão
   const hasCalledOnLoginSuccess = useRef(false);
@@ -86,21 +87,36 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
           }
         });
         
-        if (error) throw error;
+        // Se houver erro no signup, verificar se é "email já cadastrado"
+        if (error) {
+          if (error.message?.includes('User already registered') || 
+              error.message?.includes('already been registered') ||
+              error.message?.includes('already exists')) {
+            toast.error('Este email já está cadastrado. Tente fazer login.');
+            setLoading(false);
+            return;
+          }
+          throw error;
+        }
         
-        if (data?.user?.identities?.length === 0) {
-          toast.error('Este email já está cadastrado. Tente fazer login.');
-        } else if (data?.user && !data?.session) {
-          toast.success('✅ Conta criada! Verifique seu email para confirmar.', {
-            duration: 6000,
-          });
-        } else {
-          toast.success('✅ Conta criada e autenticado com sucesso!');
-          // Resetar contador de tentativas após sucesso
+        // Se session existe, foi criado com sucesso sem necessidade de confirmação
+        if (data?.session) {
+          toast.success('✅ Conta criada com sucesso!');
           setAttemptCount(0);
           setBlockedUntil(null);
           setCountdown(0);
-          // Callback paranotificar sucesso
+          if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
+            hasCalledOnLoginSuccess.current = true;
+            onLoginSuccess();
+          }
+        } else if (data?.user && data?.user?.confirmation_sent_at) {
+          // Email de confirmação enviado
+          setSuccessEmail(email);
+          setSignUpSuccess(true);
+          setLoading(false);
+          return;
+        } else {
+          toast.success('✅ Conta criada com sucesso!');
           if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
             hasCalledOnLoginSuccess.current = true;
             onLoginSuccess();
@@ -115,18 +131,15 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
         if (error) throw error;
 
         toast.success('✅ Login realizado com sucesso!');
-        // Resetar contador de tentativas após sucesso
         setAttemptCount(0);
         setBlockedUntil(null);
         setCountdown(0);
-        // Callback para notificar sucesso
         if (onLoginSuccess && !hasCalledOnLoginSuccess.current) {
           hasCalledOnLoginSuccess.current = true;
           onLoginSuccess();
         }
       }
     } catch (error: any) {
-      // Registrar tentativa para rate limiting client-side
       registerAttempt();
       
       let errorMessage = error.message || 'Erro ao autenticar';
@@ -148,7 +161,7 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
         error.message?.toLowerCase().includes('rate limit') ||
         error.message?.toLowerCase().includes('many requests')
       ) {
-        errorMessage = '⏱️ Limite atingido. O Supabase bloqueou temporariamente (429). Aguarde 5-15 minutos e tente novamente. Isso acontece quando há muitas tentativas de cadastro/login.';
+        errorMessage = '⏱️ Limite atingido. O Supabase bloqueou temporariamente (429). Aguarde 5-15 minutos e tente novamente.';
       } else if (error.message?.includes('rate limit')) {
         errorMessage = '⏱️ Limite de requisições atingido. Aguarde alguns minutos.';
       }
@@ -202,13 +215,58 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
       toast.success('✅ Email de recuperação enviado! Verifique sua caixa de entrada.', {
         duration: 6000,
       });
-      setShowForgotPassword(false);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao enviar email de recuperação');
     } finally {
       setLoading(false);
     }
   };
+
+  // Renderiza tela de sucesso após cadastro
+  if (signUpSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full mb-6">
+              <CheckCircle2 size={40} className="text-green-600 dark:text-green-400" />
+            </div>
+            
+            <h1 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-3">
+              Conta Criada! ✅
+            </h1>
+            
+            <p className="text-gray-500 dark:text-gray-400 font-medium mb-6">
+              Enviamos um email de confirmação para:
+            </p>
+            
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 mb-6">
+              <p className="text-blue-700 dark:text-blue-300 font-bold">{successEmail}</p>
+            </div>
+            
+            <div className="space-y-3 text-sm text-gray-500 dark:text-gray-400 mb-8">
+              <p>📧 <strong>Verifique sua caixa de entrada</strong></p>
+              <p>📨 <strong>Verifique a pasta de spam</strong> caso não encontre</p>
+              <p>🔗 <strong>Clique no link</strong> de confirmação para ativar sua conta</p>
+            </div>
+            
+            <button
+              onClick={() => {
+                setSignUpSuccess(false);
+                setIsSignUp(false);
+                setEmail('');
+                setPassword('');
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2"
+            >
+              <ArrowLeft size={20} strokeWidth={3} />
+              VOLTAR PARA LOGIN
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950 flex items-center justify-center p-4">
@@ -392,3 +450,4 @@ export function LoginScreen({ previewMode = false, onLoginSuccess }: LoginScreen
     </div>
   );
 }
+
