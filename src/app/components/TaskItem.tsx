@@ -26,15 +26,7 @@ interface TaskItemProps {
   id?: string;
 }
 
-export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate, id = task.id }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id });
+export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate }) => {
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -99,18 +91,20 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
   };
 
   return (
-      <Motion.div 
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
-      className={cn(
-        "group select-none user-select-none -webkit-user-select-none flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative z-20 shadow-lg ring-1 ring-gray-200/50",
-        isDragging && "shadow-2xl ring-2 ring-blue-500/50 !scale-[1.02]",
+      <div className="group select-none user-select-none -webkit-user-select-none flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative">
+        <Motion.div 
+          layout
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+          style={{
+            transform: isDragging ? 'scale(1.02)' : 'none',
+            zIndex: isDragging ? 1000 : 1,
+            boxShadow: isDragging ? '0 20px 40px rgba(0,0,0,0.2)' : 'none'
+          }}
+          className={cn(
+            "flex-1",
         // Time-based coloring
         timeStatus === 'red' 
           ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 hover:shadow-lg hover:border-red-300 dark:hover:border-red-700"
@@ -135,7 +129,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
         )} />
       )}
       <div className="flex items-center gap-2 w-full">
-        <div {...listeners} className="p-1 -m-1">
+        <div {...listeners} className="p-1 -m-1 cursor-grab active:cursor-grabbing">
           <GripIcon />
         </div>
         <button
