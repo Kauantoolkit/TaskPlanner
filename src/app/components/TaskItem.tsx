@@ -99,18 +99,17 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
   };
 
   return (
-    <Motion.div 
+      <Motion.div 
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "group cursor-grab active:cursor-grabbing flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative z-20 shadow-lg ring-1 ring-gray-200/50",
+        "group select-none user-select-none -webkit-user-select-none flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative z-20 shadow-lg ring-1 ring-gray-200/50",
         isDragging && "shadow-2xl ring-2 ring-blue-500/50 !scale-[1.02]",
         // Time-based coloring
         timeStatus === 'red' 
@@ -136,9 +135,14 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
         )} />
       )}
       <div className="flex items-center gap-2 w-full">
-        <GripIcon />
+        <div {...listeners} className="p-1 -m-1">
+          <GripIcon />
+        </div>
         <button
-          onClick={() => onToggle(task.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(task.id);
+          }}
           className={cn(
             "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 active:scale-90",
             task.completed 
@@ -237,14 +241,20 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
       <div className="flex gap-2">
         {onEdit && (
           <button
-            onClick={() => onEdit(task.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit!(task.id);
+            }}
             className="text-gray-300 dark:text-gray-600 hover:text-blue-500 transition-colors p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 opacity-0 group-hover:opacity-100 shrink-0"
           >
             <Pencil size={18} />
           </button>
         )}
         <button
-          onClick={() => onDelete(task.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(task.id);
+          }}
           className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 shrink-0"
         >
           <Trash2 size={18} />
