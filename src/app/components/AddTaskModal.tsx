@@ -114,7 +114,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   // Helper to get day labels for display
   const getRecurringDaysLabel = () => {
-    if (!recurringDays || recurringDays.length === 0) return '';
+    if (!recurringDays || !Array.isArray(recurringDays) || recurringDays.length === 0) return '';
     if (recurringDays.length === 1) {
       return DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label.toLowerCase() || '';
     }
@@ -426,7 +426,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                     </p>
                   )}
                   <p className="text-xs text-gray-400 mt-2 px-1">
-                    {recurringDays && recurringDays.length === 1
+                    {recurringDays && Array.isArray(recurringDays) && recurringDays.length === 1
                       ? `Esta tarefa aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label.toLowerCase()}`
                       : `Esta tarefa aparecerá ${getRecurringDaysLabel()}`
                     }
@@ -540,7 +540,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 <Calendar size={18} className="text-gray-400" />
                 <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
                   {taskType === 'weekly'
-                    ? recurringDays && recurringDays.length === 1
+                    ? recurringDays && Array.isArray(recurringDays) && recurringDays.length === 1
                       ? `Aparecerá toda ${DAYS_OF_WEEK.find(d => d.value === recurringDays[0])?.label}`
                       : `Aparecerá ${getRecurringDaysLabel()}`
                     : `Agendado para: ${format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}`

@@ -252,6 +252,13 @@ if (!cancelled && mounted) {
     }
   }, [isSupabaseMode, loading, repository]);
 
+  const reorderTasks = useCallback((reorderedTasks: Task[]) => {
+    setTasks(reorderedTasks);
+
+    // Note: If needed, you could add Supabase persistence here
+    // For now, localStorage auto-saves via the useEffect
+  }, []);
+
   return {
     tasks,
     categories,
@@ -266,5 +273,6 @@ if (!cancelled && mounted) {
     deleteCategory,
     updateSettings,
     clearAll,
+    reorderTasks,
   };
 }

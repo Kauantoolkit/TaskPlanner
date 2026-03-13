@@ -20,6 +20,8 @@ import { LocalModeBanner } from './components/LocalModeBanner';
 import { AdBanner } from './components/AdBanner';
 import { useIsMobile } from './components/ui/use-mobile';
 import { Sheet, SheetContent } from './components/ui/sheet';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 // Componente de loading simples
 function FullScreenLoader() {
@@ -125,12 +127,35 @@ function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Extrai dados do repo APÓS todos os hooks
-  const { tasks, categories, settings, addTask, updateTask, deleteTask, addCategory, deleteCategory, updateSettings, clearAll } = repo;
+  const { tasks, categories, settings, addTask, updateTask, deleteTask, addCategory, deleteCategory, updateSettings, clearAll, reorderTasks } = repo;
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
 
   // Get current day of week (0 = Sunday, 1 = Monday, etc.)
   const currentDayOfWeek = selectedDate.getDay();
+
+  // DnD Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = tasks.findIndex((task) => task.id === active.id);
+      const newIndex = tasks.findIndex((task) => task.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reorder tasks and persist
+        const reorderedTasks = arrayMove(tasks, oldIndex, newIndex);
+        reorderTasks(reorderedTasks);
+      }
+    }
+  };
 
   // useMemo fixos
   const filteredTasks = useMemo(() => {
@@ -401,7 +426,7 @@ function AppContent() {
 
               {filteredTasks.length > 0 ? (
                 <AnimatePresence mode="popLayout">
-                  <Motion.div 
+                  <Motion.div
                     key={formattedSelectedDate}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -409,116 +434,132 @@ function AppContent() {
                     transition={{ duration: 0.3 }}
                     className="space-y-8 md:space-y-10"
                   >
-                    {filteredTasks.filter(t => t.isDelivery).length > 0 && (
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      {filteredTasks.filter(t => t.isDelivery).length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-4 px-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Entregas Pendentes</h3>
+                          </div>
+                          <SortableContext items={filteredTasks.filter(t => t.isDelivery).map(t => t.id)} strategy={verticalListSortingStrategy}>
+                            <div className="grid gap-3">
+                              {filteredTasks
+                                .filter(t => t.isDelivery)
+                                .map(task => (
+                                  <TaskItem
+                                    key={task.id}
+                                    task={{
+                                      ...task,
+                                      completed: !!task.completed
+                                    }}
+                                    category={categories.find(c => c.id === task.categoryId)}
+                                    onToggle={handleToggleTask}
+                                    onDelete={handleDeleteTask}
+                                    onEdit={handleEditTask}
+                                    selectedDate={formattedSelectedDate}
+                                  />
+                                ))}
+                            </div>
+                          </SortableContext>
+                        </div>
+                      )}
+
                       <div>
                         <div className="flex items-center gap-2 mb-4 px-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Entregas Pendentes</h3>
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                          <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Recorrente Semanal</h3>
                         </div>
-                        <div className="grid gap-3">
-                          {filteredTasks
-                            .filter(t => t.isDelivery)
-                            .map(task => (
-                              <TaskItem
-                                key={task.id}
-                                task={{
-                                  ...task,
-                                  completed: !!task.completed
-                                }}
-                                category={categories.find(c => c.id === task.categoryId)}
-                                onToggle={handleToggleTask}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                                selectedDate={formattedSelectedDate}
-                              />
-                            ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-4 px-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Recorrente Semanal</h3>
-                      </div>
-                      <div className="grid gap-3">
                         {filteredTasks.filter(t => t.recurringType === 'weekly').length > 0 ? (
-                          filteredTasks
-                            .filter(t => t.recurringType === 'weekly')
-                            .map(task => (
-                              <TaskItem
-                                key={task.id}
-                                task={{
-                                  ...task,
-                                  completed: task.completedDates.includes(formattedSelectedDate)
-                                }}
-                                category={categories.find(c => c.id === task.categoryId)}
-                                onToggle={handleToggleTask}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                              />
-                            ))
+                          <SortableContext items={filteredTasks.filter(t => t.recurringType === 'weekly').map(t => t.id)} strategy={verticalListSortingStrategy}>
+                            <div className="grid gap-3">
+                              {filteredTasks
+                                .filter(t => t.recurringType === 'weekly')
+                                .map(task => (
+                                  <TaskItem
+                                    key={task.id}
+                                    task={{
+                                      ...task,
+                                      completed: task.completedDates.includes(formattedSelectedDate)
+                                    }}
+                                    category={categories.find(c => c.id === task.categoryId)}
+                                    onToggle={handleToggleTask}
+                                    onDelete={handleDeleteTask}
+                                    onEdit={handleEditTask}
+                                  />
+                                ))}
+                            </div>
+                          </SortableContext>
                         ) : (
-                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa semanal.</p>
+                          <div className="grid gap-3">
+                            <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa semanal.</p>
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-4 px-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Rotina Permanente</h3>
-                      </div>
-                      <div className="grid gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-4 px-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Rotina Permanente</h3>
+                        </div>
                         {filteredTasks.filter(t => t.isPermanent).length > 0 ? (
-                          filteredTasks
-                            .filter(t => t.isPermanent)
-                            .map(task => (
-                              <TaskItem
-                                key={task.id}
-                                task={{
-                                  ...task,
-                                  completed: task.completedDates.includes(formattedSelectedDate)
-                                }}
-                                category={categories.find(c => c.id === task.categoryId)}
-                                onToggle={handleToggleTask}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                              />
-                            ))
+                          <SortableContext items={filteredTasks.filter(t => t.isPermanent).map(t => t.id)} strategy={verticalListSortingStrategy}>
+                            <div className="grid gap-3">
+                              {filteredTasks
+                                .filter(t => t.isPermanent)
+                                .map(task => (
+                                  <TaskItem
+                                    key={task.id}
+                                    task={{
+                                      ...task,
+                                      completed: task.completedDates.includes(formattedSelectedDate)
+                                    }}
+                                    category={categories.find(c => c.id === task.categoryId)}
+                                    onToggle={handleToggleTask}
+                                    onDelete={handleDeleteTask}
+                                    onEdit={handleEditTask}
+                                  />
+                                ))}
+                            </div>
+                          </SortableContext>
                         ) : (
-                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma rotina para exibir.</p>
+                          <div className="grid gap-3">
+                            <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma rotina para exibir.</p>
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-4 px-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Tarefas do Dia</h3>
-                      </div>
-                      <div className="grid gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-4 px-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                          <h3 className="text-xs uppercase tracking-[0.2em] font-black text-gray-400">Tarefas do Dia</h3>
+                        </div>
                         {filteredTasks.filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly').length > 0 ? (
-                          filteredTasks
-                            .filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly')
-                            .map(task => (
-                              <TaskItem
-                                key={task.id}
-                                task={{
-                                  ...task,
-                                  completed: !!task.completed
-                                }}
-                                category={categories.find(c => c.id === task.categoryId)}
-                                onToggle={handleToggleTask}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                              />
-                            ))
+                          <SortableContext items={filteredTasks.filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly').map(t => t.id)} strategy={verticalListSortingStrategy}>
+                            <div className="grid gap-3">
+                              {filteredTasks
+                                .filter(t => !t.isPermanent && !t.isDelivery && t.recurringType !== 'weekly')
+                                .map(task => (
+                                  <TaskItem
+                                    key={task.id}
+                                    task={{
+                                      ...task,
+                                      completed: !!task.completed
+                                    }}
+                                    category={categories.find(c => c.id === task.categoryId)}
+                                    onToggle={handleToggleTask}
+                                    onDelete={handleDeleteTask}
+                                    onEdit={handleEditTask}
+                                  />
+                                ))}
+                            </div>
+                          </SortableContext>
                         ) : (
-                          <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa específica hoje.</p>
+                          <div className="grid gap-3">
+                            <p className="text-sm font-bold text-gray-300 px-2 italic">Nenhuma tarefa específica hoje.</p>
+                          </div>
                         )}
                       </div>
-                    </div>
+                    </DndContext>
                   </Motion.div>
                 </AnimatePresence>
               ) : (
