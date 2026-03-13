@@ -25,15 +25,15 @@ export function AdBanner() {
   }, []);
 
   return (
-    <div className="w-full p-2 md:p-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+    <div className="w-full p-1 md:p-1.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
       {/* Código do AdSense */}
       <ins
         ref={bannerRef}
         className="adsbygoogle"
-        style={{ display: 'block', textAlign: 'center', minHeight: '50px' }}
+        style={{ display: 'block', textAlign: 'center', minHeight: '32px', maxHeight: '90px' }}
         data-ad-client="ca-pub-8759057006374144"
         data-ad-slot="9126701774"
-        data-ad-format="auto"
+        data-ad-format="horizontal"
         data-full-width-responsive="true"
       />
     </div>
