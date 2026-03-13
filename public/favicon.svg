@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Background circle -->
+  <circle cx="24" cy="24" r="24" fill="#2563eb"/>
+
+  <!-- Checklist icon -->
+  <g transform="translate(12, 12)">
+    <!-- First checkbox (checked) -->
+    <rect x="2" y="3" width="6" height="6" rx="1.5" fill="#ffffff" opacity="0.9"/>
+    <path d="M 3.5 6 L 5 7.5 L 7.5 4.5" stroke="#2563eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <line x1="11" y1="6" x2="22" y2="6" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+    <!-- Second checkbox (checked) -->
+    <rect x="2" y="12" width="6" height="6" rx="1.5" fill="#ffffff" opacity="0.9"/>
+    <path d="M 3.5 15 L 5 16.5 L 7.5 13.5" stroke="#2563eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <line x1="11" y1="15" x2="22" y2="15" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+    <!-- Third checkbox (unchecked) -->
+    <rect x="2" y="21" width="6" height="6" rx="1.5" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="11" y1="24" x2="22" y2="24" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  </g>
+</svg>
