@@ -126,11 +126,28 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
           )} />
         )}
 
-        <div className="flex items-center gap-2 w-full">
+        <div className="flex items-center gap-2 md:gap-3 w-full">
           {/* Grip Handle */}
-          <div {...listeners} className="p-1 -m-1 cursor-grab active:cursor-grabbing touch-none">
+          <div {...listeners} className="p-1 -m-1 cursor-grab active:cursor-grabbing touch-none shrink-0">
             <GripIcon />
           </div>
+
+          {/* Time Badge - Always visible if scheduled */}
+          {task.scheduledTime && (
+            <div className={cn(
+              "flex items-center justify-center gap-1 px-2 md:px-3 py-1.5 md:py-2 rounded-lg md:rounded-xl font-black text-xs md:text-sm transition-all shrink-0 min-w-[60px] md:min-w-[70px]",
+              task.completed
+                ? "bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 line-through"
+                : timeStatus === 'red'
+                  ? "bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400 ring-2 ring-red-300 dark:ring-red-800 animate-pulse"
+                  : timeStatus === 'yellow'
+                    ? "bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-400 ring-2 ring-yellow-300 dark:ring-yellow-800"
+                    : "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400"
+            )}>
+              <Clock size={14} strokeWidth={3} className="shrink-0" />
+              <span>{task.scheduledTime}</span>
+            </div>
+          )}
 
           <button
             onClick={(e) => {
@@ -138,7 +155,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
               onToggle(task.id);
             }}
             className={cn(
-              "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 active:scale-90",
+              "w-6 h-6 md:w-7 md:h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 active:scale-90",
               task.completed
                 ? "bg-blue-500 border-blue-500 text-white"
                 : timeStatus === 'red'
@@ -163,44 +180,24 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
           </button>
 
           <div className="flex flex-col flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              {task.scheduledTime && !task.completed && (
-                <span className={cn(
-                  "flex items-center gap-1 text-xs font-black px-2 py-1 rounded-lg transition-all shrink-0",
-                  timeStatus === 'red'
-                    ? "bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 animate-pulse"
-                    : timeStatus === 'yellow'
-                      ? "bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300"
-                      : "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300"
-                )}>
-                  <Clock size={12} strokeWidth={3} />
-                  {task.scheduledTime}
-                </span>
-              )}
-              <span className={cn(
-                "text-base font-medium transition-all break-words leading-tight",
-                task.completed
-                  ? "text-gray-400 dark:text-gray-500 line-through"
-                  : timeStatus === 'red'
-                    ? "text-red-700 dark:text-red-300"
-                    : timeStatus === 'yellow'
-                      ? "text-yellow-700 dark:text-yellow-300"
-                      : "text-gray-700 dark:text-gray-200"
-              )}>
-                {task.text}
-              </span>
-            </div>
+            <span className={cn(
+              "text-sm md:text-base font-medium transition-all break-words leading-tight mb-1",
+              task.completed
+                ? "text-gray-400 dark:text-gray-500 line-through"
+                : timeStatus === 'red'
+                  ? "text-red-700 dark:text-red-300"
+                  : timeStatus === 'yellow'
+                    ? "text-yellow-700 dark:text-yellow-300"
+                    : "text-gray-700 dark:text-gray-200"
+            )}>
+              {task.text}
+            </span>
 
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              {/* Time status badge */}
-              {timeStatus === 'red' && !task.completed && (
-                <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 animate-pulse">
-                  <Clock size={10} /> ATRASADA
-                </span>
-              )}
-              {timeStatus === 'yellow' && !task.completed && (
-                <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-950/50 text-yellow-600 dark:text-yellow-400">
-                  <Clock size={10} /> EM BREVE
+            <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+              {/* Duration badge if available */}
+              {task.scheduledTime && task.estimatedDurationMinutes && !task.completed && (
+                <span className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
+                  {formatMinutesToReadable(task.estimatedDurationMinutes)}
                 </span>
               )}
               {task.isDelivery ? (
@@ -236,14 +233,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
                 </span>
               )}
               {task.isDelivery && task.deliveryDate && (
-                <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-gray-500 bg-gray-50/50 dark:bg-gray-950/30 px-1.5 py-0.5 rounded transition-colors">
-                  <Clock size={10} /> {format(parseISO(task.deliveryDate), "dd/MM", { locale: ptBR })}
-                </span>
-              )}
-              {/* Show duration if scheduled */}
-              {task.scheduledTime && !task.completed && task.estimatedDurationMinutes && (
-                <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-gray-500 bg-gray-50/50 dark:bg-gray-950/30 px-1.5 py-0.5 rounded transition-colors">
-                  Duração: {formatMinutesToReadable(task.estimatedDurationMinutes)}
+                <span className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
+                  <Calendar size={10} /> {format(parseISO(task.deliveryDate), "dd/MM", { locale: ptBR })}
                 </span>
               )}
             </div>
