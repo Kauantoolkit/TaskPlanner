@@ -15,16 +15,18 @@ interface CalendarViewProps {
   onToggleTask: (id: string, date: string) => void;
   onDeleteTask: (id: string) => void;
   onAddTask: () => void;
+  onEditTask?: (id: string) => void;
 }
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ 
-  tasks, 
-  categories, 
-  selectedDate, 
+export const CalendarView: React.FC<CalendarViewProps> = ({
+  tasks,
+  categories,
+  selectedDate,
   onDateChange,
   onToggleTask,
   onDeleteTask,
-  onAddTask
+  onAddTask,
+  onEditTask
 }) => {
   const [calendarMonth, setCalendarMonth] = useState<Date>(selectedDate);
   const [activeSection, setActiveSection] = useState<'calendar' | 'tasks'>('calendar');
@@ -114,55 +116,90 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         <div className="flex-1 flex flex-col items-center">
           <style>{`
             .rdp {
-              --rdp-cell-size: 44px;
+              --rdp-cell-size: 48px;
               --rdp-accent-color: #2563eb;
               --rdp-background-color: #eff6ff;
               margin: 0;
               width: 100%;
             }
+            @media (max-width: 768px) {
+              .rdp {
+                --rdp-cell-size: 40px;
+              }
+            }
             .rdp-months { width: 100%; justify-content: center; }
             .rdp-table { max-width: none; width: 100%; }
+            .rdp-caption_label {
+              font-weight: 900;
+              font-size: 1.25rem;
+              color: #1f2937;
+            }
+            .rdp-head_cell {
+              color: #6b7280;
+              font-weight: 700;
+              font-size: 0.875rem;
+            }
             .rdp-day_selected {
               background-color: var(--rdp-accent-color) !important;
               color: white !important;
               font-weight: 900 !important;
-              border-radius: 16px !important;
-              box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+              border-radius: 12px !important;
+              box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4);
+              transform: scale(1.05);
             }
             .rdp-day {
-              border-radius: 16px;
-              transition: all 0.2s;
+              border-radius: 12px;
+              transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+              font-weight: 600;
             }
             .rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
               background-color: var(--rdp-background-color);
+              transform: scale(1.02);
+            }
+            .rdp-button:active:not([disabled]) {
+              transform: scale(0.98);
+            }
+            .rdp-day_today:not(.rdp-day_selected) {
+              font-weight: 900;
+              color: #2563eb;
+              background-color: #dbeafe;
             }
             .dark .rdp-day { color: #e5e7eb; }
             .dark .rdp-month { color: #f3f4f6; }
-            .dark .rdp-caption_label { color: #f3f4f6; font-weight: 900; font-size: 1.1rem; }
-            .dark .rdp-head_cell { color: #9ca3af; font-weight: 700; }
+            .dark .rdp-caption_label { color: #f3f4f6; }
+            .dark .rdp-head_cell { color: #9ca3af; }
+            .dark .rdp-day_today:not(.rdp-day_selected) {
+              color: #60a5fa;
+              background-color: rgba(37, 99, 235, 0.2);
+            }
+            .dark .rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
+              background-color: rgba(59, 130, 246, 0.1);
+            }
             .rdp-day.has-task-dot {
               position: relative;
             }
             .rdp-day.has-task-dot::after {
               content: '';
               position: absolute;
-              bottom: 6px;
+              bottom: 4px;
               left: 50%;
               transform: translateX(-50%);
-              width: 5px;
-              height: 5px;
+              width: 6px;
+              height: 6px;
               border-radius: 50%;
-              background-color: #3b82f6;
+              background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+              box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
               z-index: 10;
             }
             .rdp-day_selected.has-task-dot::after {
-              background-color: white !important;
+              background: white !important;
+              box-shadow: 0 2px 4px rgba(255, 255, 255, 0.5);
             }
             .dark .rdp-day.has-task-dot::after {
-              background-color: #60a5fa;
+              background: linear-gradient(135deg, #60a5fa, #a78bfa);
             }
             .dark .rdp-day_selected.has-task-dot::after {
-              background-color: white !important;
+              background: white !important;
             }
           `}</style>
           <DayPicker
@@ -178,12 +215,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           />
         </div>
 
-        <div className="mt-8 p-6 bg-blue-50 dark:bg-blue-950/30 rounded-3xl border border-blue-100 dark:border-blue-900/50">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-blue-600" />
-            <p className="text-xs font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest">
-              Dias com tarefas marcados com ponto
-            </p>
+        <div className="mt-6 md:mt-8 space-y-3">
+          <div className="p-4 md:p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-2xl md:rounded-3xl border border-blue-100 dark:border-blue-900/50">
+            <div className="flex items-center gap-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-blue-600 to-purple-600" />
+              <p className="text-[10px] md:text-xs font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">
+                Dias com tarefas
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+              <span>Hoje</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-600 ring-2 ring-blue-200 dark:ring-blue-800" />
+              <span>Selecionado</span>
+            </div>
           </div>
         </div>
       </div>
@@ -237,6 +286,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           category={categories.find(c => c.id === task.categoryId)}
                           onToggle={(id) => onToggleTask(id, formattedSelectedDate)}
                           onDelete={onDeleteTask}
+                          onEdit={onEditTask}
                           selectedDate={formattedSelectedDate}
                         />
                       ))}
@@ -261,6 +311,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           category={categories.find(c => c.id === task.categoryId)}
                           onToggle={(id) => onToggleTask(id, formattedSelectedDate)}
                           onDelete={onDeleteTask}
+                          onEdit={onEditTask}
                           selectedDate={formattedSelectedDate}
                         />
                       ))}
@@ -285,6 +336,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           category={categories.find(c => c.id === task.categoryId)}
                           onToggle={(id) => onToggleTask(id, formattedSelectedDate)}
                           onDelete={onDeleteTask}
+                          onEdit={onEditTask}
                         />
                       ))}
                     </div>

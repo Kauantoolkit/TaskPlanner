@@ -8,6 +8,7 @@ export interface Settings {
   darkMode: boolean;
   showCompleted: boolean;
   confirmDelete: boolean;
+  sortByTime: boolean;
 }
 
 // Modelo de Usuário

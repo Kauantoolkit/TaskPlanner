@@ -19,6 +19,7 @@ const INITIAL_SETTINGS: Settings = {
   darkMode: false,
   showCompleted: true,
   confirmDelete: true,
+  sortByTime: true,
 };
 
 // Singleton do repository para evitar recriação

@@ -8,6 +8,7 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { CategoryModal } from './components/CategoryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CalendarView } from './components/CalendarView';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { useDataRepository } from './hooks/useDataRepository';
 import { Toaster, toast } from 'sonner';
 import { ImageWithFallback } from './components/figma/ImageWithFallback';
@@ -125,6 +126,7 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingTask, setEditingTask] = useState<Task | undefined>(undefined);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<{ id: string; text: string } | null>(null);
 
   // Extrai dados do repo APÓS todos os hooks
   const { tasks, categories, settings, addTask, updateTask, deleteTask, addCategory, deleteCategory, updateSettings, clearAll, reorderTasks } = repo;
@@ -159,27 +161,38 @@ function AppContent() {
 
   // useMemo fixos
   const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
+    const filtered = tasks.filter(task => {
       const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
       // Task permanente (todos os dias)
       if (task.isPermanent) return true;
-      
+
       // Task semanal - aparece no(s) dia(s) da semana configurado(s)
       if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
         return task.recurringDays.includes(currentDayOfWeek);
       }
-      
+
       // Task de entrega - aparece até a data final
       if (task.isDelivery && task.deliveryDate) {
         return formattedSelectedDate <= task.deliveryDate;
       }
-      
+
       // Task única - aparece apenas na data específica
       return task.date === formattedSelectedDate;
     });
-  }, [tasks, formattedSelectedDate, searchQuery, currentDayOfWeek]);
+
+    // Sort by time if enabled
+    if (settings.sortByTime) {
+      return filtered.sort((a, b) => {
+        const timeA = a.scheduledTime || '23:59';
+        const timeB = b.scheduledTime || '23:59';
+        return timeA.localeCompare(timeB);
+      });
+    }
+
+    return filtered;
+  }, [tasks, formattedSelectedDate, searchQuery, currentDayOfWeek, settings.sortByTime]);
 
   const stats = useMemo(() => {
     const dailyTasks = filteredTasks;
@@ -246,13 +259,29 @@ function AppContent() {
 
   const handleDeleteTask = async (id: string) => {
     if (settings.confirmDelete) {
-      if (!confirm('Deseja excluir esta tarefa?')) return;
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        setTaskToDelete({ id: task.id, text: task.text });
+        return;
+      }
     }
     try {
       await deleteTask(id);
       toast.info('Tarefa removida');
     } catch (err) {
       toast.error('Erro ao remover tarefa');
+    }
+  };
+
+  const confirmDeleteTask = async () => {
+    if (taskToDelete) {
+      try {
+        await deleteTask(taskToDelete.id);
+        toast.info('Tarefa removida');
+        setTaskToDelete(null);
+      } catch (err) {
+        toast.error('Erro ao remover tarefa');
+      }
     }
   };
 
@@ -596,7 +625,7 @@ function AppContent() {
               )}
             </div>
           ) : (
-            <CalendarView 
+            <CalendarView
               tasks={tasks}
               categories={categories}
               selectedDate={selectedDate}
@@ -604,6 +633,7 @@ function AppContent() {
               onToggleTask={handleToggleTask}
               onDeleteTask={handleDeleteTask}
               onAddTask={() => setIsModalOpen(true)}
+              onEditTask={handleEditTask}
             />
           )}
         </main>
@@ -639,6 +669,19 @@ function AppContent() {
 
         {isMembersModalOpen && (
           <MembersModal onClose={() => setIsMembersModalOpen(false)} />
+        )}
+
+        {taskToDelete && (
+          <ConfirmDialog
+            isOpen={!!taskToDelete}
+            onClose={() => setTaskToDelete(null)}
+            onConfirm={confirmDeleteTask}
+            title="Excluir tarefa"
+            description={`Tem certeza que deseja excluir "${taskToDelete.text}"?`}
+            confirmText="Excluir"
+            cancelText="Cancelar"
+            variant="danger"
+          />
         )}
 
         <LocalModeBanner />

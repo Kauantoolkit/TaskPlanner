@@ -163,18 +163,33 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
           </button>
 
           <div className="flex flex-col flex-1 min-w-0">
-            <span className={cn(
-              "text-base font-medium transition-all break-words leading-tight",
-              task.completed
-                ? "text-gray-400 dark:text-gray-500 line-through"
-                : timeStatus === 'red'
-                  ? "text-red-700 dark:text-red-300"
-                  : timeStatus === 'yellow'
-                    ? "text-yellow-700 dark:text-yellow-300"
-                    : "text-gray-700 dark:text-gray-200"
-            )}>
-              {task.text}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {task.scheduledTime && !task.completed && (
+                <span className={cn(
+                  "flex items-center gap-1 text-xs font-black px-2 py-1 rounded-lg transition-all shrink-0",
+                  timeStatus === 'red'
+                    ? "bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 animate-pulse"
+                    : timeStatus === 'yellow'
+                      ? "bg-yellow-100 dark:bg-yellow-950/50 text-yellow-700 dark:text-yellow-300"
+                      : "bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300"
+                )}>
+                  <Clock size={12} strokeWidth={3} />
+                  {task.scheduledTime}
+                </span>
+              )}
+              <span className={cn(
+                "text-base font-medium transition-all break-words leading-tight",
+                task.completed
+                  ? "text-gray-400 dark:text-gray-500 line-through"
+                  : timeStatus === 'red'
+                    ? "text-red-700 dark:text-red-300"
+                    : timeStatus === 'yellow'
+                      ? "text-yellow-700 dark:text-yellow-300"
+                      : "text-gray-700 dark:text-gray-200"
+              )}>
+                {task.text}
+              </span>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2 mt-1">
               {/* Time status badge */}
@@ -225,10 +240,10 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
                   <Clock size={10} /> {format(parseISO(task.deliveryDate), "dd/MM", { locale: ptBR })}
                 </span>
               )}
-              {/* Show time info if scheduled */}
-              {task.scheduledTime && !task.completed && (
+              {/* Show duration if scheduled */}
+              {task.scheduledTime && !task.completed && task.estimatedDurationMinutes && (
                 <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-gray-500 bg-gray-50/50 dark:bg-gray-950/30 px-1.5 py-0.5 rounded transition-colors">
-                  <Clock size={10} /> {task.scheduledTime} ({formatMinutesToReadable(task.estimatedDurationMinutes || 240)})
+                  Duração: {formatMinutesToReadable(task.estimatedDurationMinutes)}
                 </span>
               )}
             </div>

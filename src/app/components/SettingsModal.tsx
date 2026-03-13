@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Moon, Sun, Bell, Settings as SettingsIcon } from 'lucide-react';
+import { X, Trash2, Moon, Sun, Bell, Settings as SettingsIcon, Clock } from 'lucide-react';
 import { Settings } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -109,6 +109,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
                     aria-hidden="true"
                   />
                   <span className="sr-only">{settings.confirmDelete ? 'Desativar' : 'Ativar'} confirmação de exclusão</span>
+                </button>
+              </div>
+
+              {/* Sort By Time Toggle */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl" aria-hidden="true">
+                    <Clock size={20} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-gray-700 dark:text-gray-200" id="sort-by-time-label">
+                      Ordenar por horário
+                    </span>
+                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">
+                      Organização
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleSetting('sortByTime')}
+                  role="switch"
+                  aria-checked={settings.sortByTime}
+                  aria-labelledby="sort-by-time-label"
+                  className={`w-12 h-6 rounded-full transition-colors relative min-w-[48px] min-h-[24px] ${
+                    settings.sortByTime ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                      settings.sortByTime ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">{settings.sortByTime ? 'Desativar' : 'Ativar'} ordenação por horário</span>
                 </button>
               </div>
 
