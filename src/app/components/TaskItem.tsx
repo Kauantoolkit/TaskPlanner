@@ -1,7 +1,11 @@
-import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil } from 'lucide-react';
+import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil, GripVertical } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripIcon } from './GripIcon';
+import { Task } from '../types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Task, Category } from '../types';
+import { Category } from '../types';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, parseISO, addMinutes, isBefore, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -19,9 +23,24 @@ interface TaskItemProps {
   onDelete: (id: string) => void;
   onEdit?: (id: string) => void;
   selectedDate?: string;
+  id?: string;
 }
 
-export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate }) => {
+export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate, id = task.id }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
   // Calculate days until delivery
   const getDaysUntilDelivery = () => {
     if (!task.isDelivery || !task.deliveryDate) return null;
@@ -81,13 +100,18 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
 
   return (
     <Motion.div 
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "group flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative",
+        "group cursor-grab active:cursor-grabbing flex items-center justify-between p-4 rounded-xl border shadow-sm transition-all relative z-20 shadow-lg ring-1 ring-gray-200/50",
+        isDragging && "shadow-2xl ring-2 ring-blue-500/50 !scale-[1.02]",
         // Time-based coloring
         timeStatus === 'red' 
           ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 hover:shadow-lg hover:border-red-300 dark:hover:border-red-700"
@@ -111,7 +135,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
           isDeliveryToday ? "bg-red-500" : isDeliveryUrgent ? "bg-orange-500" : "bg-green-500"
         )} />
       )}
-      <div className="flex items-center gap-3 w-full">
+      <div className="flex items-center gap-2 w-full">
+        <GripIcon />
         <button
           onClick={() => onToggle(task.id)}
           className={cn(
