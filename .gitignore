@@ -44,3 +44,7 @@ coverage/
 
 .venv
 .venv/
+
+#configs claude
+
+settings.local.json
