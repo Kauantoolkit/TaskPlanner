@@ -119,9 +119,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
     e.preventDefault();
     if (!text.trim()) return;
 
-    const recurringTypeValue: 'daily' | 'weekly' | undefined = 
-      taskType === 'weekly' ? 'weekly' : 
-      taskType === 'permanent' ? 'daily' : undefined;
+    const recurringTypeValue: 'weekly' | undefined = 
+      taskType === 'weekly' ? 'weekly' : undefined;
     
     const taskData = {
       text,
@@ -261,7 +260,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onAdd, sele
                   className={cn(
                     "flex flex-col items-center gap-2 md:gap-3 p-3 md:p-5 rounded-2xl border-2 transition-all",
                     taskType === 'permanent' 
-                      ? "bg-orange-50/50 dark:bg-orange-950/20 border-orange-500 text-orange-600" 
+                      ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-500 text-blue-600" 
                       : "bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 text-gray-400 hover:border-gray-200"
                   )}
                 >

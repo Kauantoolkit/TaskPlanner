@@ -1,7 +1,7 @@
 import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Category } from '../types';
+import { Task, Category } from '../types';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, parseISO, addMinutes, isBefore, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,21 +10,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface Task {
-  id: string;
-  text: string;
-  isPermanent: boolean;
-  completed: boolean;
-  date?: string;
-  categoryId?: string;
-  isDelivery?: boolean;
-  deliveryDate?: string;
-  // Novos campos de horário
-  scheduledTime?: string;
-  estimatedDurationMinutes?: number;
-  yellowAlertMinutes?: number;
-  startedAt?: string;
-}
+
 
 interface TaskItemProps {
   task: Task;
@@ -177,7 +163,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
                 <Clock size={10} /> EM BREVE
               </span>
             )}
-            {task.isDelivery ? (
+{task.isDelivery ? (
               <span className={cn(
                 "flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded transition-all",
                 isDeliveryToday 
@@ -191,6 +177,10 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
             ) : task.isPermanent ? (
               <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-blue-500 bg-blue-50/50 dark:bg-blue-950/30 px-1.5 py-0.5 rounded transition-colors">
                 <Repeat size={10} /> Permanente
+              </span>
+            ) : task.recurringType === 'weekly' ? (
+              <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-purple-500 bg-purple-50/50 dark:bg-purple-950/30 px-1.5 py-0.5 rounded transition-colors">
+                <Repeat size={10} className="rotate-90" /> Semanal
               </span>
             ) : (
               <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-orange-500 bg-orange-50/50 dark:bg-orange-950/30 px-1.5 py-0.5 rounded transition-colors">
