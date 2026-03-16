@@ -391,7 +391,7 @@ export class SupabaseRepository implements IDataRepository {
     const { workspaceId } = await this.getOrCreateUserWorkspace();
 
     // Buscar cada setting individualmente - especificar colunas explicitamente
-    const settingsKeys = ['darkMode', 'showCompleted', 'confirmDelete'];
+    const settingsKeys = ['darkMode', 'showCompleted', 'confirmDelete', 'sortByTime'];
     const result: any = {};
 
     for (const key of settingsKeys) {
@@ -432,6 +432,7 @@ export class SupabaseRepository implements IDataRepository {
       { key: 'darkMode', value: settings.darkMode },
       { key: 'showCompleted', value: settings.showCompleted },
       { key: 'confirmDelete', value: settings.confirmDelete },
+      { key: 'sortByTime', value: settings.sortByTime },
     ];
 
     for (const { key, value } of settingsToSave) {
