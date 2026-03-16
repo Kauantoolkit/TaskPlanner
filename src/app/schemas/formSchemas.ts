@@ -37,12 +37,6 @@ export const addTaskSchema = z.object({
 }, {
   message: 'Selecione pelo menos um dia da semana',
   path: ['recurringDays']
-}).refine((data) => {
-  // Alerta amarelo deve ser menor que duração estimada
-  return data.yellowAlertMinutes < data.estimatedDurationMinutes;
-}, {
-  message: 'Alerta amarelo deve ser menor que a duração estimada',
-  path: ['yellowAlertMinutes']
 });
 
 export type AddTaskFormData = z.infer<typeof addTaskSchema>;

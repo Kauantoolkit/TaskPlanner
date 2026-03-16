@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
-import { DayPicker } from 'react-day-picker';
+import React, { useState, useMemo, useCallback } from 'react';
+import { DayPicker, DayContentProps } from 'react-day-picker';
 import { ptBR } from 'date-fns/locale';
-import { format, isSameMonth, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
-import { Calendar as CalendarIcon, ListTodo, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, isToday } from 'date-fns';
+import { Plus, ListTodo, Clock, Target, Repeat, Calendar } from 'lucide-react';
 import { Task, Category } from '../types';
 import { TaskItem } from './TaskItem';
 import { motion as Motion, AnimatePresence } from 'motion/react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 interface CalendarViewProps {
   tasks: Task[];
@@ -18,6 +24,72 @@ interface CalendarViewProps {
   onEditTask?: (id: string) => void;
 }
 
+// ─── pure helpers ──────────────────────────────────────────────────────────────
+
+function getTasksForDate(tasks: Task[], date: Date): Task[] {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const dow = date.getDay();
+  return tasks.filter(t => {
+    if (t.isPermanent) return true;
+    if (t.recurringType === 'weekly' && t.recurringDays?.includes(dow)) return true;
+    if (t.isDelivery && t.deliveryDate) return dateStr <= t.deliveryDate;
+    return t.date === dateStr;
+  });
+}
+
+function isTaskDoneOnDate(task: Task, dateStr: string): boolean {
+  if (task.isPermanent || task.recurringType === 'weekly') {
+    return task.completedDates.includes(dateStr);
+  }
+  return !!task.completed;
+}
+
+function sortByTime(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const tA = a.scheduledTime || '23:59';
+    const tB = b.scheduledTime || '23:59';
+    return tA.localeCompare(tB);
+  });
+}
+
+// ─── calendar CSS ──────────────────────────────────────────────────────────────
+
+const CALENDAR_CSS = `
+  .cv .rdp { margin: 0; width: 100%; }
+  .cv .rdp-months { width: 100%; justify-content: center; }
+  .cv .rdp-month { width: 100%; }
+  .cv .rdp-table { width: 100%; max-width: none; border-collapse: separate; border-spacing: 3px; }
+  .cv .rdp-caption { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding: 0; }
+  .cv .rdp-caption_label { font-size: 1rem; font-weight: 900; color: #111827; text-transform: capitalize; letter-spacing: -0.02em; }
+  .dark .cv .rdp-caption_label { color: #f9fafb; }
+  .cv .rdp-nav { display: flex; gap: 2px; }
+  .cv .rdp-nav_button { width: 32px; height: 32px; border-radius: 8px; color: #6b7280; transition: background 0.12s; display: flex; align-items: center; justify-content: center; }
+  .cv .rdp-nav_button:hover:not([disabled]) { background: #f3f4f6; color: #111827; }
+  .dark .cv .rdp-nav_button { color: #9ca3af; }
+  .dark .cv .rdp-nav_button:hover:not([disabled]) { background: #374151; color: #f9fafb; }
+  .cv .rdp-head_row { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cv .rdp-head_cell { font-size: 0.65rem; font-weight: 800; color: #d1d5db; text-transform: uppercase; text-align: center; padding: 0.25rem 0 0.75rem; }
+  .dark .cv .rdp-head_cell { color: #4b5563; }
+  .cv .rdp-tbody tr { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cv .rdp-cell { padding: 1px; }
+  .cv .rdp-day {
+    width: 100%; border-radius: 10px; font-weight: 600; font-size: 0.8rem;
+    color: #374151; transition: all 0.12s; padding: 6px 2px;
+    min-height: 48px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid transparent;
+  }
+  .cv .rdp-day:hover:not([disabled]):not(.rdp-day_selected) { background: #f9fafb; border-color: #e5e7eb; }
+  .dark .cv .rdp-day { color: #d1d5db; }
+  .dark .cv .rdp-day:hover:not([disabled]):not(.rdp-day_selected) { background: #1f2937; border-color: #374151; }
+  .cv .rdp-day_selected { background: #2563eb !important; color: #fff !important; font-weight: 900 !important; border-color: #2563eb !important; box-shadow: 0 2px 12px rgba(37,99,235,0.35); }
+  .cv .rdp-day_today:not(.rdp-day_selected) { background: #eff6ff; color: #2563eb; font-weight: 900; border-color: #bfdbfe; }
+  .dark .cv .rdp-day_today:not(.rdp-day_selected) { background: rgba(37,99,235,0.1); color: #60a5fa; border-color: rgba(59,130,246,0.25); }
+  .cv .rdp-day_outside { opacity: 0.2; }
+  .cv .rdp-day_disabled { opacity: 0.15; cursor: not-allowed; }
+`;
+
+// ─── component ─────────────────────────────────────────────────────────────────
+
 export const CalendarView: React.FC<CalendarViewProps> = ({
   tasks,
   categories,
@@ -26,342 +98,195 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onToggleTask,
   onDeleteTask,
   onAddTask,
-  onEditTask
+  onEditTask,
 }) => {
   const [calendarMonth, setCalendarMonth] = useState<Date>(selectedDate);
 
-  // Sync calendar month when selected date changes
   React.useEffect(() => {
     setCalendarMonth(selectedDate);
   }, [selectedDate]);
 
   const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
-  const currentDayOfWeek = selectedDate.getDay();
 
-  // Filter tasks for selected day
-  const dayTasks = tasks.filter(task => {
-    if (task.isPermanent) return true;
+  // Tasks for selected day sorted by time
+  const dayTasks = useMemo(
+    () => sortByTime(getTasksForDate(tasks, selectedDate)),
+    [tasks, selectedDate]
+  );
 
-    if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
-      return task.recurringDays.includes(currentDayOfWeek);
+  // Progress stats for selected day
+  const stats = useMemo(() => {
+    const done = dayTasks.filter(t => isTaskDoneOnDate(t, formattedSelectedDate)).length;
+    const total = dayTasks.length;
+    return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+  }, [dayTasks, formattedSelectedDate]);
+
+  // Custom day content — shows dot indicator below the day number
+  const DayContent = useCallback((props: DayContentProps) => {
+    const { date } = props;
+    const ts = getTasksForDate(tasks, date);
+    const ds = format(date, 'yyyy-MM-dd');
+
+    if (ts.length === 0) {
+      return <span className="leading-none">{format(date, 'd')}</span>;
     }
 
-    if (task.isDelivery && task.deliveryDate) {
-      const today = format(new Date(), 'yyyy-MM-dd');
-      return formattedSelectedDate >= today && formattedSelectedDate <= task.deliveryDate;
-    }
+    const done = ts.filter(t => isTaskDoneOnDate(t, ds)).length;
+    const allDone = done === ts.length;
+    const someDone = done > 0 && !allDone;
 
-    return task.date === formattedSelectedDate;
-  });
-
-  // Task count per day for the current month
-  const getTaskCountForDate = (date: Date): number => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const dayOfWeek = date.getDay();
-
-    return tasks.filter(t => {
-      if (t.isPermanent) return true;
-
-      if (t.recurringType === 'weekly' && t.recurringDays && t.recurringDays.length > 0) {
-        return t.recurringDays.includes(dayOfWeek);
-      }
-
-      if (t.isDelivery && t.deliveryDate) {
-        return dateStr <= t.deliveryDate;
-      }
-
-      return t.date === dateStr;
-    }).length;
-  };
-
-  const modifiers = {
-    hasTask: (date: Date) => getTaskCountForDate(date) > 0
-  };
+    return (
+      <div className="flex flex-col items-center gap-[3px]">
+        <span className="leading-none">{format(date, 'd')}</span>
+        <span className={cn(
+          'block w-1.5 h-1.5 rounded-full flex-shrink-0',
+          allDone  ? 'bg-green-500' :
+          someDone ? 'bg-yellow-400' :
+                     'bg-blue-500'
+        )} />
+      </div>
+    );
+  }, [tasks]);
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-gray-50 to-blue-50/30 dark:from-gray-950 dark:to-blue-950/20">
-      {/* Header */}
-      <header className="p-4 md:p-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 md:p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl md:rounded-2xl shadow-lg">
-              <CalendarIcon className="text-white" size={20} />
-            </div>
-            <div>
-              <h2 className="text-lg md:text-2xl font-black text-gray-900 dark:text-gray-100">
-                Visualização Mensal
-              </h2>
-              <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-semibold">
-                {format(calendarMonth, "MMMM 'de' yyyy", { locale: ptBR })}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onAddTask}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xs md:text-sm font-black px-3 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl transition-all shadow-lg hover:shadow-xl active:scale-95"
-          >
-            <PlusCircle size={16} strokeWidth={3} />
-            <span className="hidden md:inline">NOVA TAREFA</span>
-            <span className="md:hidden">NOVA</span>
-          </button>
+    <div className="flex flex-col lg:flex-row lg:h-full bg-[#fafafa] dark:bg-gray-950">
+      <style>{CALENDAR_CSS}</style>
+
+      {/* ── Calendar ─────────────────────────────────────────── */}
+      <div className="flex-1 p-4 md:p-8 lg:overflow-y-auto">
+        <div className="cv">
+          <DayPicker
+            mode="single"
+            selected={selectedDate}
+            onSelect={date => date && onDateChange(date)}
+            month={calendarMonth}
+            onMonthChange={setCalendarMonth}
+            locale={ptBR}
+            components={{ DayContent }}
+          />
         </div>
-      </header>
 
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr,400px] gap-0 lg:gap-6 p-4 md:p-6">
-          {/* Calendar Section */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl md:rounded-3xl shadow-xl border border-gray-200 dark:border-gray-800 p-4 md:p-8 flex flex-col">
-            <style>{`
-              .calendar-custom {
-                width: 100%;
-              }
-              .calendar-custom .rdp {
-                --rdp-cell-size: clamp(40px, 8vw, 60px);
-                --rdp-accent-color: #2563eb;
-                margin: 0;
-                width: 100%;
-              }
-              .calendar-custom .rdp-months {
-                width: 100%;
-                justify-content: center;
-              }
-              .calendar-custom .rdp-table {
-                width: 100%;
-                max-width: none;
-              }
-              .calendar-custom .rdp-caption {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                padding: 1rem 0 2rem 0;
-              }
-              .calendar-custom .rdp-caption_label {
-                font-size: 1.25rem;
-                font-weight: 900;
-                color: #1f2937;
-              }
-              .calendar-custom .dark .rdp-caption_label {
-                color: #f3f4f6;
-              }
-              .calendar-custom .rdp-head_cell {
-                font-size: 0.75rem;
-                font-weight: 700;
-                color: #6b7280;
-                text-transform: uppercase;
-                padding: 0.5rem 0;
-              }
-              .calendar-custom .dark .rdp-head_cell {
-                color: #9ca3af;
-              }
-              .calendar-custom .rdp-cell {
-                padding: 2px;
-              }
-              .calendar-custom .rdp-day {
-                border-radius: 14px;
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                font-weight: 600;
-                font-size: 0.875rem;
-                position: relative;
-              }
-              .calendar-custom .rdp-day_selected {
-                background: linear-gradient(135deg, #2563eb, #7c3aed) !important;
-                color: white !important;
-                font-weight: 900 !important;
-                box-shadow: 0 10px 30px -5px rgba(37, 99, 235, 0.5);
-                transform: scale(1.05);
-              }
-              .calendar-custom .rdp-day_today:not(.rdp-day_selected) {
-                background-color: #dbeafe;
-                color: #2563eb;
-                font-weight: 900;
-                box-shadow: 0 0 0 2px #93c5fd;
-              }
-              .calendar-custom .dark .rdp-day_today:not(.rdp-day_selected) {
-                background-color: rgba(37, 99, 235, 0.2);
-                color: #60a5fa;
-                box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
-              }
-              .calendar-custom .rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
-                background-color: #f3f4f6;
-                transform: scale(1.03);
-              }
-              .calendar-custom .dark .rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
-                background-color: #374151;
-              }
-              .calendar-custom .rdp-day.has-task-dot::before {
-                content: attr(data-task-count);
-                position: absolute;
-                top: 4px;
-                right: 4px;
-                width: 18px;
-                height: 18px;
-                background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-                color: white;
-                border-radius: 50%;
-                font-size: 10px;
-                font-weight: 900;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
-                z-index: 10;
-              }
-              .calendar-custom .rdp-day_selected.has-task-dot::before {
-                background: white;
-                color: #2563eb;
-              }
-              .calendar-custom .rdp-day[disabled] {
-                opacity: 0.3;
-              }
-              .calendar-custom .dark .rdp-day {
-                color: #e5e7eb;
-              }
-            `}</style>
-
-            <div className="calendar-custom flex-1 flex items-center justify-center">
-              <DayPicker
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && onDateChange(date)}
-                month={calendarMonth}
-                onMonthChange={setCalendarMonth}
-                locale={ptBR}
-                modifiers={modifiers}
-                modifiersClassNames={{
-                  hasTask: 'has-task-dot'
-                }}
-                components={{
-                  Day: ({ ...props }) => {
-                    const count = getTaskCountForDate(props.date);
-                    return (
-                      <button
-                        {...props}
-                        data-task-count={count}
-                        className={props.className}
-                      />
-                    );
-                  }
-                }}
-              />
-            </div>
-
-            {/* Legend */}
-            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800 grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-xl">
-                <div className="w-3 h-3 rounded-full bg-blue-600 ring-2 ring-blue-200 dark:ring-blue-800" />
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-300">Hoje</span>
-              </div>
-              <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-xl">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-600 to-purple-600" />
-                <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Selecionado</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Tasks Sidebar */}
-          <div className="hidden lg:flex flex-col bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="p-6 bg-gradient-to-r from-blue-600 to-purple-600">
-              <p className="text-xs font-black text-blue-100 uppercase tracking-wider mb-1">
-                {format(selectedDate, "EEEE", { locale: ptBR })}
-              </p>
-              <h3 className="text-2xl font-black text-white">
-                {format(selectedDate, "dd 'de' MMM", { locale: ptBR })}
-              </h3>
-              <div className="mt-3 flex items-center gap-2 text-white/90 text-sm font-bold">
-                <ListTodo size={16} />
-                <span>{dayTasks.length} {dayTasks.length === 1 ? 'tarefa' : 'tarefas'}</span>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <AnimatePresence mode="popLayout">
-                {dayTasks.length > 0 ? (
-                  dayTasks.map((task) => (
-                    <Motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                    >
-                      <TaskItem
-                        task={{
-                          ...task,
-                          completed: task.isPermanent || task.recurringType === 'weekly'
-                            ? task.completedDates.includes(formattedSelectedDate)
-                            : !!task.completed
-                        }}
-                        category={categories.find(c => c.id === task.categoryId)}
-                        onToggle={(id) => onToggleTask(id, formattedSelectedDate)}
-                        onDelete={onDeleteTask}
-                        onEdit={onEditTask}
-                        selectedDate={formattedSelectedDate}
-                      />
-                    </Motion.div>
-                  ))
-                ) : (
-                  <Motion.div
-                    key="empty"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex flex-col items-center justify-center h-full text-center py-12"
-                  >
-                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-4">
-                      <ListTodo size={32} className="text-gray-300" />
-                    </div>
-                    <p className="text-sm font-bold text-gray-400 mb-2">Nenhuma tarefa</p>
-                    <button
-                      onClick={onAddTask}
-                      className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline"
-                    >
-                      Adicionar tarefa +
-                    </button>
-                  </Motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+        {/* Legenda */}
+        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 text-xs font-bold">
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+            Tarefas pendentes
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0" />
+            Parcialmente concluído
+          </span>
+          <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+            Tudo concluído
+          </span>
         </div>
       </div>
 
-      {/* Mobile Tasks List */}
-      <div className="lg:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 max-h-[40vh] overflow-y-auto">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
-              {format(selectedDate, "EEEE", { locale: ptBR })}
+      {/* ── Task panel ───────────────────────────────────────── */}
+      <div className={cn(
+        'bg-white dark:bg-gray-900',
+        'border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-800',
+        'lg:w-[400px] lg:shrink-0 lg:flex lg:flex-col lg:overflow-hidden'
+      )}>
+
+        {/* Panel header */}
+        <div className="p-4 md:p-5 border-b border-gray-100 dark:border-gray-800 lg:shrink-0">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.18em] mb-0.5 capitalize truncate">
+                {format(selectedDate, 'EEEE', { locale: ptBR })}
+                {isToday(selectedDate) && (
+                  <span className="ml-1.5 text-blue-500">— hoje</span>
+                )}
+              </p>
+              <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 tracking-tight">
+                {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+              </h3>
+            </div>
+
+            <button
+              onClick={onAddTask}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black px-3 py-2 rounded-xl transition-all shrink-0 min-h-[36px] min-w-[36px]"
+              aria-label="Nova tarefa"
+            >
+              <Plus size={14} strokeWidth={3} />
+              <span className="hidden sm:inline">NOVA</span>
+            </button>
+          </div>
+
+          {/* Progress */}
+          {stats.total > 0 ? (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-gray-400">
+                  {stats.done}/{stats.total} {stats.done === 1 ? 'concluída' : 'concluídas'}
+                </span>
+                <span className="text-xs font-black text-blue-600">{stats.pct}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500 ease-out',
+                    stats.pct === 100 ? 'bg-green-500' : 'bg-blue-600'
+                  )}
+                  style={{ width: `${stats.pct}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-300 dark:text-gray-600 font-bold">
+              Nenhuma tarefa neste dia
             </p>
-            <h3 className="text-lg font-black text-gray-900 dark:text-gray-100">
-              {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
-            </h3>
-          </div>
-          <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
-            {dayTasks.length} {dayTasks.length === 1 ? 'tarefa' : 'tarefas'}
-          </div>
+          )}
         </div>
 
-        <div className="space-y-2">
-          {dayTasks.length > 0 ? (
-            dayTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={{
-                  ...task,
-                  completed: task.isPermanent || task.recurringType === 'weekly'
-                    ? task.completedDates.includes(formattedSelectedDate)
-                    : !!task.completed
-                }}
-                category={categories.find(c => c.id === task.categoryId)}
-                onToggle={(id) => onToggleTask(id, formattedSelectedDate)}
-                onDelete={onDeleteTask}
-                onEdit={onEditTask}
-                selectedDate={formattedSelectedDate}
-              />
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-sm font-bold text-gray-400">Nenhuma tarefa para este dia</p>
-            </div>
-          )}
+        {/* Task list */}
+        <div className="lg:flex-1 lg:overflow-y-auto p-4 space-y-2">
+          <AnimatePresence mode="popLayout">
+            {dayTasks.length > 0 ? (
+              dayTasks.map(task => (
+                <Motion.div
+                  key={task.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <TaskItem
+                    task={{
+                      ...task,
+                      completed: isTaskDoneOnDate(task, formattedSelectedDate),
+                    }}
+                    category={categories.find(c => c.id === task.categoryId)}
+                    onToggle={id => onToggleTask(id, formattedSelectedDate)}
+                    onDelete={onDeleteTask}
+                    onEdit={onEditTask}
+                    selectedDate={formattedSelectedDate}
+                  />
+                </Motion.div>
+              ))
+            ) : (
+              <Motion.div
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center justify-center py-12 text-center"
+              >
+                <div className="w-12 h-12 bg-gray-50 dark:bg-gray-800 rounded-2xl flex items-center justify-center mb-3">
+                  <ListTodo size={22} className="text-gray-300 dark:text-gray-600" />
+                </div>
+                <p className="text-sm font-bold text-gray-400 mb-3">Dia livre!</p>
+                <button
+                  onClick={onAddTask}
+                  className="text-xs text-blue-600 dark:text-blue-400 font-black hover:underline flex items-center gap-1 min-h-[32px]"
+                >
+                  <Plus size={12} strokeWidth={3} />
+                  Adicionar tarefa
+                </button>
+              </Motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
