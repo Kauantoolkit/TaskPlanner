@@ -145,7 +145,9 @@ export class SupabaseRepository implements IDataRepository {
       isDelivery: row.is_delivery,
       deliveryDate: row.delivery_date,
       recurringType: row.recurring_type,
-      recurringDays: row.recurring_days || [],
+      recurringDays: Array.isArray(row.recurring_days)
+        ? row.recurring_days
+        : (typeof row.recurring_days === 'string' ? JSON.parse(row.recurring_days) : []),
       scheduledTime: row.scheduled_time ? row.scheduled_time.substring(0, 5) : undefined,
       estimatedDurationMinutes: row.estimated_duration_minutes,
       yellowAlertMinutes: row.yellow_alert_minutes,
@@ -210,7 +212,9 @@ export class SupabaseRepository implements IDataRepository {
     isDelivery: data.is_delivery,
     deliveryDate: data.delivery_date,
     recurringType: data.recurring_type,
-    recurringDays: data.recurring_days ?? [],
+    recurringDays: Array.isArray(data.recurring_days)
+      ? data.recurring_days
+      : (typeof data.recurring_days === 'string' ? JSON.parse(data.recurring_days) : []),
     scheduledTime: data.scheduled_time ? data.scheduled_time.substring(0, 5) : undefined,
     estimatedDurationMinutes: data.estimated_duration_minutes,
     yellowAlertMinutes: data.yellow_alert_minutes,
@@ -281,8 +285,9 @@ export class SupabaseRepository implements IDataRepository {
     isDelivery: data.is_delivery,
     deliveryDate: data.delivery_date,
     recurringType: data.recurring_type,
-    recurringDays: data.recurring_days ?? [],
-
+    recurringDays: Array.isArray(data.recurring_days)
+      ? data.recurring_days
+      : (typeof data.recurring_days === 'string' ? JSON.parse(data.recurring_days) : []),
     scheduledTime: data.scheduled_time ? data.scheduled_time.substring(0, 5) : undefined,
     estimatedDurationMinutes: data.estimated_duration_minutes,
     yellowAlertMinutes: data.yellow_alert_minutes,
@@ -399,7 +404,7 @@ export class SupabaseRepository implements IDataRepository {
         .select('value, key')
         .eq('workspace_id', workspaceId)
         .eq('key', key)
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         // O valor é armazenado como JSONB, ex: {"value": true}

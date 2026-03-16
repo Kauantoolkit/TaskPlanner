@@ -9,7 +9,7 @@ export const addTaskSchema = z.object({
   categoryId: z.string().optional(),
   taskType: z.enum(['unique', 'permanent', 'delivery', 'weekly']),
   deliveryDate: z.string().optional(),
-  recurringDays: z.array(z.number().min(0).max(6)).min(1, 'Selecione pelo menos um dia').optional(),
+  recurringDays: z.array(z.number().min(0).max(6)).optional(),
   scheduledTime: z.string()
     .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Horário inválido')
     .default('09:00'),
