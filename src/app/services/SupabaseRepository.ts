@@ -146,7 +146,7 @@ export class SupabaseRepository implements IDataRepository {
       deliveryDate: row.delivery_date,
       recurringType: row.recurring_type,
       recurringDays: row.recurring_days || [],
-      scheduledTime: row.scheduled_time,
+      scheduledTime: row.scheduled_time ? row.scheduled_time.substring(0, 5) : undefined,
       estimatedDurationMinutes: row.estimated_duration_minutes,
       yellowAlertMinutes: row.yellow_alert_minutes,
       startedAt: row.started_at,
@@ -211,7 +211,7 @@ export class SupabaseRepository implements IDataRepository {
     deliveryDate: data.delivery_date,
     recurringType: data.recurring_type,
     recurringDays: data.recurring_days ?? [],
-    scheduledTime: data.scheduled_time,
+    scheduledTime: data.scheduled_time ? data.scheduled_time.substring(0, 5) : undefined,
     estimatedDurationMinutes: data.estimated_duration_minutes,
     yellowAlertMinutes: data.yellow_alert_minutes,
     startedAt: data.started_at,
@@ -283,8 +283,7 @@ export class SupabaseRepository implements IDataRepository {
     recurringType: data.recurring_type,
     recurringDays: data.recurring_days ?? [],
 
-    // ❗ CAMPOS QUE FALTAVAM
-    scheduledTime: data.scheduled_time,
+    scheduledTime: data.scheduled_time ? data.scheduled_time.substring(0, 5) : undefined,
     estimatedDurationMinutes: data.estimated_duration_minutes,
     yellowAlertMinutes: data.yellow_alert_minutes,
     startedAt: data.started_at,
