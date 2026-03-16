@@ -129,7 +129,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
         text: data.text,
         isPermanent: data.taskType === 'permanent',
         date: data.taskType === 'unique' ? format(selectedDate, 'yyyy-MM-dd') : undefined,
-        categoryId: data.categoryId,
+        category: data.category,
         isDelivery: data.taskType === 'delivery',
         deliveryDate: data.taskType === 'delivery' ? data.deliveryDate : undefined,
         recurringType: data.taskType === 'weekly' ? 'weekly' : undefined,

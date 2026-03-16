@@ -220,7 +220,7 @@ function AppContent() {
   }
 
   // Handlers
-  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[] }) => {
+  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => {
     try {
       await addTask({
         text: newTask.text,
@@ -233,6 +233,9 @@ function AppContent() {
         deliveryDate: newTask.deliveryDate,
         recurringType: newTask.recurringType,
         recurringDays: newTask.recurringDays,
+        scheduledTime: newTask.scheduledTime,
+        estimatedDurationMinutes: newTask.estimatedDurationMinutes,
+        yellowAlertMinutes: newTask.yellowAlertMinutes,
       });
       toast.success(newTask.isDelivery ? 'Entrega criada!' : newTask.recurringType === 'weekly' ? 'Tarefa semanal criada!' : 'Tarefa adicionada!');
     } catch (err) {
@@ -321,7 +324,7 @@ function AppContent() {
     }
   };
 
-  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[] }) => {
+  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => {
     try {
       await updateTask(id, {
         text: updatedData.text,
@@ -331,7 +334,10 @@ function AppContent() {
         isDelivery: updatedData.isDelivery,
         deliveryDate: updatedData.deliveryDate,
         recurringType: updatedData.recurringType,
-        recurringDays: updatedData.recurringDays
+        recurringDays: updatedData.recurringDays,
+        scheduledTime: updatedData.scheduledTime,
+        estimatedDurationMinutes: updatedData.estimatedDurationMinutes,
+        yellowAlertMinutes: updatedData.yellowAlertMinutes,
       });
       toast.success('Tarefa atualizada!');
     } catch (err) {

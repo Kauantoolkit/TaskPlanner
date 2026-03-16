@@ -12,7 +12,9 @@ const INITIAL_SETTINGS: Settings = {
   darkMode: false,
   showCompleted: true,
   confirmDelete: true,
+  sortByTime: false,
 };
+
 
 /**
  * Repository usando Supabase (PostgreSQL)
@@ -155,83 +157,145 @@ export class SupabaseRepository implements IDataRepository {
   }
 
   async createTask(task: Task): Promise<Task> {
-    const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
+  const { workspaceId, memberId } = await this.getOrCreateUserWorkspace();
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({
-        id: task.id,
-        workspace_id: workspaceId,
-        assigned_to_id: task.assignedToId || memberId,
-        created_by_id: memberId,
-        text: task.text,
-        is_permanent: task.isPermanent,
-        completed_dates: task.completedDates,
-        date: task.date || new Date().toISOString().split('T')[0],
-        completed: task.completed || false,
-        category: task.categoryId || null, // Banco usa 'category' como texto
-        is_delivery: task.isDelivery || false,
-        delivery_date: task.deliveryDate || null,
-        recurring_type: task.recurringType || null,
-        recurring_days: task.recurringDays ? JSON.stringify(task.recurringDays) : null,
-        scheduled_time: task.scheduledTime || null,
-        estimated_duration_minutes: task.estimatedDurationMinutes || null,
-        yellow_alert_minutes: task.yellowAlertMinutes || null,
-        started_at: task.startedAt || null,
-      })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      id: task.id,
+      workspace_id: workspaceId,
+      assigned_to_id: task.assignedToId ?? memberId,
+      created_by_id: memberId,
 
-    if (error) {
-      throw error;
-    }
-    return task;
-  }
+      text: task.text,
+
+      is_permanent: task.isPermanent,
+      completed_dates: task.completedDates ?? [],
+
+      date: task.date ?? new Date().toISOString().slice(0, 10),
+
+      completed: task.completed ?? false,
+
+      category: task.categoryId ?? null,
+
+      is_delivery: task.isDelivery ?? false,
+      delivery_date: task.deliveryDate ?? null,
+
+      recurring_type: task.recurringType ?? null,
+
+      // ❗ CORREÇÃO (não usar JSON.stringify)
+      recurring_days: task.recurringDays ?? null,
+
+      scheduled_time: task.scheduledTime ?? null,
+
+      estimated_duration_minutes: task.estimatedDurationMinutes ?? null,
+
+      yellow_alert_minutes: task.yellowAlertMinutes ?? null,
+
+      started_at: task.startedAt ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    text: data.text,
+    isPermanent: data.is_permanent,
+    completedDates: data.completed_dates ?? [],
+    date: data.date,
+    completed: data.completed,
+    categoryId: data.category,
+    isDelivery: data.is_delivery,
+    deliveryDate: data.delivery_date,
+    recurringType: data.recurring_type,
+    recurringDays: data.recurring_days ?? [],
+    scheduledTime: data.scheduled_time,
+    estimatedDurationMinutes: data.estimated_duration_minutes,
+    yellowAlertMinutes: data.yellow_alert_minutes,
+    startedAt: data.started_at,
+    assignedToId: data.assigned_to_id,
+    createdById: data.created_by_id,
+    workspaceId: data.workspace_id,
+  };
+}
+
 
   async updateTask(id: string, updates: Partial<Task>): Promise<Task> {
-    const updateData: any = { updated_at: new Date().toISOString() };
-    
-    if (updates.text !== undefined) updateData.text = updates.text;
-    if (updates.isPermanent !== undefined) updateData.is_permanent = updates.isPermanent;
-    if (updates.completedDates !== undefined) updateData.completed_dates = updates.completedDates;
-    if (updates.date !== undefined) updateData.date = updates.date;
-    if (updates.completed !== undefined) updateData.completed = updates.completed;
-    if (updates.categoryId !== undefined) updateData.category = updates.categoryId; // Banco usa 'category'
-    if (updates.isDelivery !== undefined) updateData.is_delivery = updates.isDelivery;
-    if (updates.deliveryDate !== undefined) updateData.delivery_date = updates.deliveryDate;
-    if (updates.recurringType !== undefined) updateData.recurring_type = updates.recurringType;
-    if (updates.recurringDays !== undefined) updateData.recurring_days = updates.recurringDays ? JSON.stringify(updates.recurringDays) : null;
-    if (updates.scheduledTime !== undefined) updateData.scheduled_time = updates.scheduledTime;
-    if (updates.estimatedDurationMinutes !== undefined) updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
-    if (updates.yellowAlertMinutes !== undefined) updateData.yellow_alert_minutes = updates.yellowAlertMinutes;
-    if (updates.startedAt !== undefined) updateData.started_at = updates.startedAt;
+  const updateData: any = {
+    updated_at: new Date().toISOString()
+  };
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+  if (updates.text !== undefined) updateData.text = updates.text;
+  if (updates.isPermanent !== undefined) updateData.is_permanent = updates.isPermanent;
+  if (updates.completedDates !== undefined) updateData.completed_dates = updates.completedDates;
+  if (updates.date !== undefined) updateData.date = updates.date;
+  if (updates.completed !== undefined) updateData.completed = updates.completed;
 
-    if (error) throw error;
-    
-    return {
-      id: data.id,
-      text: data.text,
-      isPermanent: data.is_permanent,
-      completedDates: data.completed_dates || [],
-      date: data.date,
-      completed: data.completed,
-      categoryId: data.category,
-      isDelivery: data.is_delivery,
-      deliveryDate: data.delivery_date,
-      recurringType: data.recurring_type,
-      recurringDays: data.recurring_days || [],
-      assignedToId: data.assigned_to_id,
-      createdById: data.created_by_id,
-      workspaceId: data.workspace_id,
-    };
-  }
+  if (updates.categoryId !== undefined)
+    updateData.category = updates.categoryId;
+
+  if (updates.isDelivery !== undefined)
+    updateData.is_delivery = updates.isDelivery;
+
+  if (updates.deliveryDate !== undefined)
+    updateData.delivery_date = updates.deliveryDate;
+
+  if (updates.recurringType !== undefined)
+    updateData.recurring_type = updates.recurringType;
+
+  // ❗ CORREÇÃO
+  if (updates.recurringDays !== undefined)
+    updateData.recurring_days = updates.recurringDays ?? null;
+
+  if (updates.scheduledTime !== undefined)
+    updateData.scheduled_time = updates.scheduledTime;
+
+  if (updates.estimatedDurationMinutes !== undefined)
+    updateData.estimated_duration_minutes = updates.estimatedDurationMinutes;
+
+  if (updates.yellowAlertMinutes !== undefined)
+    updateData.yellow_alert_minutes = updates.yellowAlertMinutes;
+
+  if (updates.startedAt !== undefined)
+    updateData.started_at = updates.startedAt;
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .update(updateData)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    text: data.text,
+    isPermanent: data.is_permanent,
+    completedDates: data.completed_dates ?? [],
+    date: data.date,
+    completed: data.completed,
+    categoryId: data.category,
+    isDelivery: data.is_delivery,
+    deliveryDate: data.delivery_date,
+    recurringType: data.recurring_type,
+    recurringDays: data.recurring_days ?? [],
+
+    // ❗ CAMPOS QUE FALTAVAM
+    scheduledTime: data.scheduled_time,
+    estimatedDurationMinutes: data.estimated_duration_minutes,
+    yellowAlertMinutes: data.yellow_alert_minutes,
+    startedAt: data.started_at,
+
+    assignedToId: data.assigned_to_id,
+    createdById: data.created_by_id,
+    workspaceId: data.workspace_id,
+  };
+}
+
+
 
   async deleteTask(id: string): Promise<void> {
     const { error } = await supabase
@@ -352,10 +416,12 @@ export class SupabaseRepository implements IDataRepository {
     }
 
     return {
-      darkMode: result.darkMode ?? INITIAL_SETTINGS.darkMode,
-      showCompleted: result.showCompleted ?? INITIAL_SETTINGS.showCompleted,
-      confirmDelete: result.confirmDelete ?? INITIAL_SETTINGS.confirmDelete,
-    };
+  darkMode: result.darkMode ?? INITIAL_SETTINGS.darkMode,
+  showCompleted: result.showCompleted ?? INITIAL_SETTINGS.showCompleted,
+  confirmDelete: result.confirmDelete ?? INITIAL_SETTINGS.confirmDelete,
+  sortByTime: result.sortByTime ?? INITIAL_SETTINGS.sortByTime,
+};
+
   }
 
   async updateSettings(settings: Settings): Promise<Settings> {

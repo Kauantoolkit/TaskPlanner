@@ -8,7 +8,7 @@ export type TaskFormData = {
   text: string;
   isPermanent: boolean;
   date?: string;
-  categoryId?: string;
+  category?: string;
   isDelivery?: boolean;
   deliveryDate?: string;
   recurringType?: 'daily' | 'weekly';
@@ -17,6 +17,7 @@ export type TaskFormData = {
   estimatedDurationMinutes?: number;
   yellowAlertMinutes?: number;
 };
+
 
 /**
  * Tipo para dados de categoria
