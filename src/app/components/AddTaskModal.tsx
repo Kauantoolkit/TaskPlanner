@@ -69,6 +69,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     watch,
     setValue,
     reset,
+    trigger,
     formState: { errors, isValid }
   } = useForm({
     resolver: zodResolver(addTaskSchema),
@@ -92,6 +93,13 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
 
   // Current day of week (0-6, 0 = Sunday)
   const currentDayOfWeek = selectedDate.getDay();
+
+  // Quando abre em modo edição, dispara validação imediata para liberar o botão salvar
+  useEffect(() => {
+    if (editingTask) {
+      trigger();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update duration and alert when scheduled time changes
   // ONLY when NOT editing (to avoid race condition)
