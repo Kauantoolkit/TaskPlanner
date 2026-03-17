@@ -35,7 +35,8 @@ function getRepository(): SupabaseRepository {
 
 export function useDataRepository() {
   // Workspace context — provides resolved workspaceId and memberId
-  const { currentWorkspaceId: workspaceId, currentMemberId: memberId, loading: workspaceLoading } = useWorkspace();
+  const { currentWorkspace, currentMemberId: memberId, loading: workspaceLoading } = useWorkspace();
+  const workspaceId = currentWorkspace?.id || '';
 
   // Estados sempre na mesma ordem
   const [tasks, setTasks] = useState<Task[]>([]);

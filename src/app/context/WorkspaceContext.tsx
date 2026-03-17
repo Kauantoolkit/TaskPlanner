@@ -39,7 +39,13 @@ const LOCAL_WORKSPACE: Workspace = {
 };
 
 function generateInviteCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  // 8 chars from crypto random — ~2.8 trilhões de combinações vs ~2 bilhões do Math.random 6-char
+  const arr = new Uint8Array(6);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(36).padStart(2, '0'))
+    .join('')
+    .substring(0, 8)
+    .toUpperCase();
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }): React.ReactElement {
@@ -323,13 +329,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Não autenticado');
 
-    const { data: ws, error } = await supabase
-      .from('workspaces')
-      .select('id, name, type, owner_id, created_at')
-      .eq('invite_code', code.trim().toUpperCase())
-      .single();
+    // Use RPC to avoid exposing all workspaces via direct table SELECT
+    const { data: wsRows, error } = await supabase
+      .rpc('get_workspace_by_invite_code', { p_code: code.trim() });
 
-    if (error || !ws) throw new Error('Código de convite inválido');
+    if (error || !wsRows || wsRows.length === 0) throw new Error('Código de convite inválido');
+    const ws = wsRows[0];
 
     // Check if already a member
     const { data: existing } = await supabase
