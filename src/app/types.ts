@@ -28,6 +28,7 @@ export interface Workspace {
   ownerId: string;
   memberIds: string[];
   createdAt: string;
+  inviteCode?: string;
 }
 
 export interface Task {

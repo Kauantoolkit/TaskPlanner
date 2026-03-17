@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, Category, Settings } from '../types';
 import { SupabaseRepository } from '../services/SupabaseRepository';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 // Variáveis de ambiente diretamente para evitar problemas de importação
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -33,6 +34,9 @@ function getRepository(): SupabaseRepository {
 }
 
 export function useDataRepository() {
+  // Workspace context — provides resolved workspaceId and memberId
+  const { currentWorkspaceId: workspaceId, currentMemberId: memberId, loading: workspaceLoading } = useWorkspace();
+
   // Estados sempre na mesma ordem
   const [tasks, setTasks] = useState<Task[]>([]);
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
@@ -41,7 +45,6 @@ export function useDataRepository() {
   const [error, setError] = useState<string | null>(null);
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
 
-  // Hooks que não dependem de props (sempre mesmos)
   const repository = useMemo(() => getRepository(), []);
 
   // Função para carregar dados do localStorage
@@ -50,7 +53,7 @@ export function useDataRepository() {
       const localTasks = localStorage.getItem('agenda-tasks');
       const localCategories = localStorage.getItem('agenda-categories');
       const localSettings = localStorage.getItem('agenda-settings');
-      
+
       if (localTasks) setTasks(JSON.parse(localTasks));
       if (localCategories) setCategories(JSON.parse(localCategories));
       if (localSettings) setSettings(JSON.parse(localSettings));
@@ -70,37 +73,52 @@ export function useDataRepository() {
     }
   }, [tasks, categories, settings]);
 
-  // Carrega dados uma única vez (useEffect sem deps = executa 1x)
+  // Keep repository in sync with active workspace
   useEffect(() => {
+    if (workspaceId && memberId) {
+      repository.setWorkspace(workspaceId, memberId);
+    }
+  }, [workspaceId, memberId, repository]);
+
+  // Load data whenever workspace is ready or changes
+  useEffect(() => {
+    // Wait for workspace context to finish loading
+    if (workspaceLoading) return;
+
+    // Local mode — use localStorage
+    if (!isSupabaseConfigured) {
+      loadFromLocalStorage();
+      setLoading(false);
+      setIsSupabaseMode(false);
+      return;
+    }
+
+    // Supabase mode but no workspace resolved yet
+    if (!workspaceId) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
-    let mounted = true;
+
+    setLoading(true);
+    setIsSupabaseMode(true);
+
+    // Sync workspace to repository before loading
+    repository.setWorkspace(workspaceId, memberId);
 
     const loadData = async () => {
-      // Se não tem Supabase configurado, usa localStorage
-      if (!isSupabaseConfigured) {
-        loadFromLocalStorage();
-        setLoading(false);
-        setIsSupabaseMode(false);
-        return;
-      }
-
-      // Supabase está configurado - verifica sessão
-      setIsSupabaseMode(true);
-
       try {
-        // Verifica se existe sessão válida
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (!session) {
-          // Sem sessão - não faz fallback para localStorage
-          if (!cancelled && mounted) {
+          if (!cancelled) {
             setError('Sessão expirada. Por favor, faça login novamente.');
             setLoading(false);
           }
           return;
         }
 
-        // Timeout de 8 segundos
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Timeout')), 8000);
         });
@@ -113,7 +131,7 @@ export function useDataRepository() {
 
         const results = await Promise.race([loadPromise, timeoutPromise]);
 
-if (!cancelled && mounted) {
+        if (!cancelled) {
           const [tasksData, categoriesData, settingsData] = results;
           setTasks(tasksData || []);
           setCategories(categoriesData || INITIAL_CATEGORIES);
@@ -122,9 +140,8 @@ if (!cancelled && mounted) {
           setLoading(false);
         }
       } catch (err: unknown) {
-        if (!cancelled && mounted) {
+        if (!cancelled) {
           const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
-          // NÃO faz fallback para localStorage quando Supabase está configurado
           setError(errorMessage);
           setLoading(false);
         }
@@ -136,7 +153,7 @@ if (!cancelled && mounted) {
     return () => {
       cancelled = true;
     };
-  }, []); // SEM DEPENDÊNCIAS - executa uma única vez
+  }, [workspaceId, workspaceLoading, repository, memberId, loadFromLocalStorage]);
 
   // Salva no localStorage APENAS quando NÃO está em modo Supabase
   useEffect(() => {
@@ -145,19 +162,17 @@ if (!cancelled && mounted) {
     }
   }, [tasks, categories, settings, loading, isSupabaseMode, saveToLocalStorage]);
 
-  // Callbacks - agora também salvam no Supabase quando apropriado
   const addTask = useCallback(async (taskData: Omit<Task, 'id' | 'createdById' | 'assignedToId' | 'workspaceId'>) => {
     const newTask: Task = {
       ...taskData,
       id: crypto.randomUUID(),
-      createdById: 'local-user',
-      assignedToId: '',
-      workspaceId: '',
+      createdById: memberId || 'local-user',
+      assignedToId: memberId || '',
+      workspaceId: workspaceId || '',
     };
 
     setTasks(prev => [newTask, ...prev]);
 
-    // Se estiver em modo Supabase, salva no Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.createTask(newTask);
@@ -165,12 +180,11 @@ if (!cancelled && mounted) {
         // Silenciosamente ignora erros
       }
     }
-  }, [isSupabaseMode, loading, repository]);
+  }, [isSupabaseMode, loading, repository, memberId, workspaceId]);
 
   const updateTask = useCallback(async (id: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
 
-    // Se estiver em modo Supabase, atualiza no Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.updateTask(id, updates);
@@ -183,7 +197,6 @@ if (!cancelled && mounted) {
   const deleteTask = useCallback(async (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
 
-    // Se estiver em modo Supabase, deleta do Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.deleteTask(id);
@@ -201,7 +214,6 @@ if (!cancelled && mounted) {
     };
     setCategories(prev => [...prev, newCategory]);
 
-    // Se estiver em modo Supabase, salva no Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.createCategory(newCategory);
@@ -215,7 +227,6 @@ if (!cancelled && mounted) {
     setCategories(prev => prev.filter(c => c.id !== id));
     setTasks(prev => prev.map(t => t.categoryId === id ? { ...t, categoryId: undefined } : t));
 
-    // Se estiver em modo Supabase, deleta do Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.deleteCategory(id);
@@ -228,7 +239,6 @@ if (!cancelled && mounted) {
   const updateSettings = useCallback(async (newSettings: Settings) => {
     setSettings(newSettings);
 
-    // Se estiver em modo Supabase, salva no Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.updateSettings(newSettings);
@@ -243,7 +253,6 @@ if (!cancelled && mounted) {
     setCategories(INITIAL_CATEGORIES);
     setSettings(INITIAL_SETTINGS);
 
-    // Se estiver em modo Supabase, limpa no Supabase
     if (isSupabaseMode && !loading) {
       try {
         await repository.clearAll();
@@ -255,16 +264,13 @@ if (!cancelled && mounted) {
 
   const reorderTasks = useCallback((reorderedTasks: Task[]) => {
     setTasks(reorderedTasks);
-
-    // Note: If needed, you could add Supabase persistence here
-    // For now, localStorage auto-saves via the useEffect
   }, []);
 
   return {
     tasks,
     categories,
     settings,
-    loading,
+    loading: loading || workspaceLoading,
     error,
     isSupabase: isSupabaseMode,
     addTask,

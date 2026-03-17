@@ -21,7 +21,15 @@ const INITIAL_SETTINGS: Settings = {
  * Schema conforme SUPABASE_SETUP.md
  */
 export class SupabaseRepository implements IDataRepository {
-  
+  private _workspaceId: string | null = null;
+  private _memberId: string | null = null;
+
+  /** Called by useDataRepository whenever the active workspace changes. */
+  setWorkspace(workspaceId: string, memberId: string) {
+    this._workspaceId = workspaceId;
+    this._memberId = memberId;
+  }
+
   private async getUserId(): Promise<string> {
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error) {
@@ -38,12 +46,24 @@ export class SupabaseRepository implements IDataRepository {
    * O primeiro login cria um workspace "Personal" automaticamente
    */
   private async getOrCreateUserWorkspace(): Promise<{ workspaceId: string; memberId: string }> {
+    // If workspace was already resolved by WorkspaceContext, use it directly
+    if (this._workspaceId && this._memberId) {
+      return { workspaceId: this._workspaceId, memberId: this._memberId };
+    }
+
     const userId = await this.getUserId();
     
     const { data: { user } } = await supabase.auth.getUser();
     const userEmail = user?.email || '';
 
-    // Buscar workspaces do usuário
+    // Buscar workspaces do usuário — primeiro via workspace_members (inclui membros convidados),
+    // depois via owner_id como fallback
+    const { data: memberRows } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', userId)
+      .limit(1);
+
     const { data: workspaces, error: wsError } = await supabase
       .from('workspaces')
       .select('id')
@@ -56,8 +76,9 @@ export class SupabaseRepository implements IDataRepository {
 
     let workspaceId: string;
 
-    if (workspaces && workspaces.length > 0) {
-      // Workspace já existe
+    if (memberRows && memberRows.length > 0) {
+      workspaceId = memberRows[0].workspace_id;
+    } else if (workspaces && workspaces.length > 0) {
       workspaceId = workspaces[0].id;
     } else {
       // Criar workspace pessoal

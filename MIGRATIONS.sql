@@ -59,6 +59,46 @@ WHERE id NOT IN (
 
 
 -- ────────────────────────────────────────────────────────────
+-- 4. workspaces.invite_code: adicionar coluna de código de convite
+--
+-- Problema: o fluxo de gestão de household/empresa exige que membros
+-- possam entrar num workspace via código curto. Sem essa coluna,
+-- não é possível convidar usuários externos.
+--
+-- Passo 4a — adicionar a coluna (nullable para workspaces já existentes)
+-- ────────────────────────────────────────────────────────────
+
+ALTER TABLE public.workspaces
+  ADD COLUMN IF NOT EXISTS invite_code TEXT;
+
+-- Passo 4b — gerar códigos para workspaces que ainda não têm
+UPDATE public.workspaces
+  SET invite_code = upper(substring(gen_random_uuid()::text, 1, 6))
+  WHERE invite_code IS NULL;
+
+-- Passo 4c — adicionar unique constraint para garantir unicidade
+ALTER TABLE public.workspaces
+  ADD CONSTRAINT workspaces_invite_code_unique
+  UNIQUE (invite_code);
+
+-- Passo 4d — habilitar RLS policies para workspaces e workspace_members
+-- (DROP antes de criar para evitar conflito caso já existam)
+
+DROP POLICY IF EXISTS "anyone can read workspace by invite_code" ON public.workspaces;
+CREATE POLICY "anyone can read workspace by invite_code"
+  ON public.workspaces
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "authenticated users can join via invite_code" ON public.workspace_members;
+CREATE POLICY "authenticated users can join via invite_code"
+  ON public.workspace_members
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+
+-- ────────────────────────────────────────────────────────────
 -- OBSERVAÇÕES (não requerem SQL, só documentação)
 -- ────────────────────────────────────────────────────────────
 
