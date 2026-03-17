@@ -26,11 +26,25 @@ interface CalendarViewProps {
 
 // ─── pure helpers ──────────────────────────────────────────────────────────────
 
+// Todas as tarefas visíveis num dia (para o painel lateral)
 function getTasksForDate(tasks: Task[], date: Date): Task[] {
   const dateStr = format(date, 'yyyy-MM-dd');
   const dow = date.getDay();
   return tasks.filter(t => {
     if (t.isPermanent) return true;
+    if (t.recurringType === 'weekly' && t.recurringDays?.includes(dow)) return true;
+    if (t.isDelivery && t.deliveryDate) return dateStr <= t.deliveryDate;
+    return t.date === dateStr;
+  });
+}
+
+// Tarefas que geram bolinha no calendário — exclui permanentes
+// (aparecem todo dia e não carregam informação diferencial)
+function getSignificantTasksForDate(tasks: Task[], date: Date): Task[] {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  const dow = date.getDay();
+  return tasks.filter(t => {
+    if (t.isPermanent) return false;
     if (t.recurringType === 'weekly' && t.recurringDays?.includes(dow)) return true;
     if (t.isDelivery && t.deliveryDate) return dateStr <= t.deliveryDate;
     return t.date === dateStr;
@@ -124,7 +138,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Custom day content — shows dot indicator below the day number
   const DayContent = useCallback((props: DayContentProps) => {
     const { date } = props;
-    const ts = getTasksForDate(tasks, date);
+    const ts = getSignificantTasksForDate(tasks, date);
     const ds = format(date, 'yyyy-MM-dd');
 
     if (ts.length === 0) {

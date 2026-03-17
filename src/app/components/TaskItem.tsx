@@ -56,6 +56,10 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
   const getTimeStatus = (): 'normal' | 'yellow' | 'red' => {
     if (!task.scheduledTime || task.completed) return 'normal';
 
+    // Só aplica alerta de tempo se a tarefa é de hoje
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (selectedDate && selectedDate !== today) return 'normal';
+
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
