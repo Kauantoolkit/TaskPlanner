@@ -520,6 +520,7 @@ function AppContent() {
                                     onToggle={handleToggleTask}
                                     onDelete={handleDeleteTask}
                                     onEdit={handleEditTask}
+                                    selectedDate={formattedSelectedDate}
                                   />
                                 ))}
                             </div>
@@ -552,6 +553,7 @@ function AppContent() {
                                     onToggle={handleToggleTask}
                                     onDelete={handleDeleteTask}
                                     onEdit={handleEditTask}
+                                    selectedDate={formattedSelectedDate}
                                   />
                                 ))}
                             </div>
@@ -584,6 +586,7 @@ function AppContent() {
                                     onToggle={handleToggleTask}
                                     onDelete={handleDeleteTask}
                                     onEdit={handleEditTask}
+                                    selectedDate={formattedSelectedDate}
                                   />
                                 ))}
                             </div>
