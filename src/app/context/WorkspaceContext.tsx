@@ -108,9 +108,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
       const memberWorkspaceIds = [...new Set((memberRows || []).map(m => m.workspace_id))];
 
       // Also include owned workspaces (in case member row is missing)
+      // NOTE: invite_code is loaded separately to avoid breaking if migration #4 hasn't run
       const { data: ownedWs } = await supabase
         .from('workspaces')
-        .select('id, name, type, owner_id, created_at, invite_code')
+        .select('id, name, type, owner_id, created_at')
         .eq('owner_id', user.id);
 
       const ownedIds = (ownedWs || []).map(w => w.id);
@@ -121,18 +122,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
       if (allIds.length > 0) {
         const { data: wsData } = await supabase
           .from('workspaces')
-          .select('id, name, type, owner_id, created_at, invite_code')
+          .select('id, name, type, owner_id, created_at')
           .in('id', allIds);
         allWorkspacesData = wsData || [];
       }
 
+      // Try to load invite_code separately (only works after migration #4)
+      if (allWorkspacesData.length > 0) {
+        try {
+          const { data: wsWithCode } = await supabase
+            .from('workspaces')
+            .select('id, invite_code')
+            .in('id', allWorkspacesData.map(w => w.id));
+          if (wsWithCode) {
+            const codeMap: Record<string, string> = {};
+            wsWithCode.forEach(w => { if (w.invite_code) codeMap[w.id] = w.invite_code; });
+            allWorkspacesData = allWorkspacesData.map(w => ({ ...w, invite_code: codeMap[w.id] }));
+          }
+        } catch {
+          // invite_code column not yet added — ignored until migration runs
+        }
+      }
+
       if (allWorkspacesData.length === 0) {
-        // Create initial personal workspace
-        const inviteCode = generateInviteCode();
+        // Create initial personal workspace (only when truly no workspace exists)
         const { data: newWs } = await supabase
           .from('workspaces')
-          .insert({ name: 'Meu Workspace', type: 'personal', owner_id: user.id, invite_code: inviteCode })
-          .select('id, name, type, owner_id, created_at, invite_code')
+          .insert({ name: 'Meu Workspace', type: 'personal', owner_id: user.id })
+          .select('id, name, type, owner_id, created_at')
           .single();
 
         if (newWs) {
@@ -149,11 +166,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
             .single();
 
           allWorkspacesData = [newWs];
-          // Set both together after all async work
           setWorkspaces([{
             id: newWs.id, name: newWs.name, type: newWs.type,
             ownerId: newWs.owner_id, memberIds: [], createdAt: newWs.created_at,
-            inviteCode: newWs.invite_code,
           }]);
           setCurrentWorkspaceId(newWs.id);
           setCurrentMemberId(newMember?.id || '');
@@ -172,7 +187,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
 
       // Restore last selected workspace or use first
       const savedId = localStorage.getItem('currentWorkspaceId');
-      const selectedId = savedId && mapped.find(w => w.id === savedId)
+      // Prefer saved workspace only if the user has a member row for it
+      // (avoids sticking to a rogue empty workspace created by a previous bug)
+      const savedHasMembership = savedId && (memberRows || []).some(m => m.workspace_id === savedId);
+      const selectedId = savedHasMembership && mapped.find(w => w.id === savedId)
         ? savedId
         : mapped[0]?.id || '';
 
@@ -257,11 +275,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Não autenticado');
 
-    const inviteCode = generateInviteCode();
     const { data: newWs, error } = await supabase
       .from('workspaces')
-      .insert({ name, type, owner_id: user.id, invite_code: inviteCode })
-      .select('id, name, type, owner_id, created_at, invite_code')
+      .insert({ name, type, owner_id: user.id })
+      .select('id, name, type, owner_id, created_at')
       .single();
 
     if (error) throw error;
@@ -278,10 +295,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
       .select('id')
       .single();
 
+    // Try to generate invite_code (only works after migration #4)
+    let inviteCode: string | undefined;
+    try {
+      inviteCode = generateInviteCode();
+      await supabase.from('workspaces').update({ invite_code: inviteCode }).eq('id', newWs.id);
+    } catch {
+      inviteCode = undefined;
+    }
+
     const workspace: Workspace = {
       id: newWs.id, name: newWs.name, type: newWs.type,
       ownerId: newWs.owner_id, memberIds: [user.id],
-      createdAt: newWs.created_at, inviteCode: newWs.invite_code,
+      createdAt: newWs.created_at, inviteCode,
     };
 
     setWorkspaces(prev => [...prev, workspace]);
@@ -299,7 +325,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
 
     const { data: ws, error } = await supabase
       .from('workspaces')
-      .select('id, name, type, owner_id, created_at, invite_code')
+      .select('id, name, type, owner_id, created_at')
       .eq('invite_code', code.trim().toUpperCase())
       .single();
 
@@ -335,7 +361,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
     const newWorkspace: Workspace = {
       id: ws.id, name: ws.name, type: ws.type,
       ownerId: ws.owner_id, memberIds: [], createdAt: ws.created_at,
-      inviteCode: ws.invite_code,
     };
 
     setWorkspaces(prev => prev.find(w => w.id === ws.id) ? prev : [...prev, newWorkspace]);
