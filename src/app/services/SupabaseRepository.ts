@@ -46,9 +46,10 @@ export class SupabaseRepository implements IDataRepository {
    * O primeiro login cria um workspace "Personal" automaticamente
    */
   private async getOrCreateUserWorkspace(): Promise<{ workspaceId: string; memberId: string }> {
-    // If workspace was already resolved by WorkspaceContext, use it directly
-    if (this._workspaceId && this._memberId) {
-      return { workspaceId: this._workspaceId, memberId: this._memberId };
+    // If workspaceId was injected by WorkspaceContext, use it directly.
+    // memberId may still be empty if the member row wasn't resolved yet — that's OK for reads.
+    if (this._workspaceId) {
+      return { workspaceId: this._workspaceId, memberId: this._memberId || '' };
     }
 
     const userId = await this.getUserId();
