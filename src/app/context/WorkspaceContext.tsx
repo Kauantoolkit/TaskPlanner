@@ -63,12 +63,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
     }
     try {
       const { data } = await supabase
-        .from('workspace_members')
-        .select('id, user_id, role, name, email')
-        .eq('workspace_id', workspaceId);
+        .rpc('get_workspace_members', { p_workspace_id: workspaceId });
 
       if (data) {
-        setMembers(data.map(m => ({
+        setMembers(data.map((m: any) => ({
           id: m.user_id || m.id,
           name: m.name || 'Membro',
           email: m.email || '',
