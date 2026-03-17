@@ -12,7 +12,7 @@ const INITIAL_SETTINGS: Settings = {
   darkMode: false,
   showCompleted: true,
   confirmDelete: true,
-  sortByTime: false,
+  sortByTime: true,
 };
 
 
@@ -166,7 +166,7 @@ export class SupabaseRepository implements IDataRepository {
     .insert({
       id: task.id,
       workspace_id: workspaceId,
-      assigned_to_id: task.assignedToId ?? memberId,
+      assigned_to_id: task.assignedToId || memberId,
       created_by_id: memberId,
 
       text: task.text,
