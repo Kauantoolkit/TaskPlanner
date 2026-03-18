@@ -1,5 +1,5 @@
-import React from 'react';
-import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil, LayoutDashboard } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripIcon } from './GripIcon';
@@ -9,6 +9,7 @@ import { Task, Category } from '../types';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { KanbanBoardView } from './kanban/KanbanBoardView';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -22,9 +23,11 @@ interface TaskItemProps {
   onEdit?: (id: string) => void;
   selectedDate?: string;
   id?: string;
+  workspaceId?: string;
 }
 
-export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate }) => {
+export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate, workspaceId }) => {
+  const [kanbanOpen, setKanbanOpen] = useState(false);
   const {
     attributes,
     listeners,
@@ -93,6 +96,15 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
   };
 
   return (
+    <>
+    {kanbanOpen && (
+      <KanbanBoardView
+        taskId={task.id}
+        taskTitle={task.text}
+        workspaceId={workspaceId ?? task.workspaceId}
+        onClose={() => setKanbanOpen(false)}
+      />
+    )}
     <div ref={setNodeRef} style={style} {...attributes} className="w-full">
       <Motion.div
         layout
@@ -241,6 +253,15 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
                   <Calendar size={10} /> {format(parseISO(task.deliveryDate), "dd/MM", { locale: ptBR })}
                 </span>
               )}
+              {task.isDelivery && (
+                <button
+                  onClick={e => { e.stopPropagation(); setKanbanOpen(true); }}
+                  className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-1.5 py-0.5 rounded transition-colors"
+                  title="Abrir quadro Kanban"
+                >
+                  <LayoutDashboard size={10} /> Kanban
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -268,5 +289,6 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
         </div>
       </Motion.div>
     </div>
+    </>
   );
 };

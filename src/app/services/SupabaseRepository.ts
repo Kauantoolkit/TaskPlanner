@@ -1,4 +1,4 @@
-import { Task, Category, Settings } from '../types';
+import { Task, Category, Settings, KanbanBoard, KanbanBoardFull, KanbanColumn, KanbanCard } from '../types';
 import { IDataRepository } from './types';
 import { supabase } from '../lib/supabase';
 
@@ -475,6 +475,217 @@ export class SupabaseRepository implements IDataRepository {
     }
 
     return settings;
+  }
+
+  // ===== KANBAN =====
+
+  private mapBoard(r: Record<string, unknown>): KanbanBoard {
+    return {
+      id: r.id as string,
+      taskId: r.task_id as string,
+      workspaceId: r.workspace_id as string,
+      title: r.title as string,
+      createdAt: r.created_at as string,
+      updatedAt: r.updated_at as string,
+    };
+  }
+
+  private mapColumn(r: Record<string, unknown>): KanbanColumn {
+    return {
+      id: r.id as string,
+      boardId: r.board_id as string,
+      title: r.title as string,
+      order: r.order as number,
+      color: r.color as string | undefined,
+      isCompletionColumn: r.is_completion_column as boolean,
+    };
+  }
+
+  private mapCard(r: Record<string, unknown>): KanbanCard {
+    return {
+      id: r.id as string,
+      columnId: r.column_id as string,
+      boardId: r.board_id as string,
+      title: r.title as string,
+      description: r.description as string | undefined,
+      order: r.order as number,
+      assignedToId: r.assigned_to_id as string | undefined,
+      dueDate: r.due_date as string | undefined,
+      labels: (r.labels as string[]) ?? [],
+      createdAt: r.created_at as string,
+      updatedAt: r.updated_at as string,
+    };
+  }
+
+  async getKanbanBoard(taskId: string): Promise<KanbanBoardFull | null> {
+    const { data: board } = await supabase
+      .from('kanban_boards')
+      .select('*')
+      .eq('task_id', taskId)
+      .maybeSingle();
+
+    if (!board) return null;
+
+    const [{ data: columns }, { data: cards }] = await Promise.all([
+      supabase.from('kanban_columns').select('*').eq('board_id', board.id).order('order'),
+      supabase.from('kanban_cards').select('*').eq('board_id', board.id).order('order'),
+    ]);
+
+    const cardsByColumn: Record<string, KanbanCard[]> = {};
+    for (const col of columns ?? []) {
+      cardsByColumn[col.id] = (cards ?? [])
+        .filter((c: any) => c.column_id === col.id)
+        .map((c: any) => this.mapCard(c));
+    }
+
+    return {
+      board: this.mapBoard(board),
+      columns: (columns ?? []).map((c: any) => this.mapColumn(c)),
+      cards: cardsByColumn,
+    };
+  }
+
+  async createKanbanBoard(
+    taskId: string,
+    workspaceId: string,
+    title: string,
+    defaultColumns = [
+      { title: 'A Fazer', isCompletionColumn: false },
+      { title: 'Em Progresso', isCompletionColumn: false },
+      { title: 'Concluído', isCompletionColumn: true },
+    ]
+  ): Promise<KanbanBoard> {
+    const { data: boardId, error } = await supabase.rpc('create_kanban_board_with_columns', {
+      p_task_id: taskId,
+      p_workspace_id: workspaceId,
+      p_title: title,
+      p_columns: defaultColumns.map(c => ({
+        title: c.title,
+        is_completion_column: c.isCompletionColumn ?? false,
+        color: (c as any).color ?? null,
+      })),
+    });
+
+    if (error) throw error;
+
+    const { data: board } = await supabase
+      .from('kanban_boards')
+      .select('*')
+      .eq('id', boardId)
+      .single();
+
+    return this.mapBoard(board);
+  }
+
+  async deleteKanbanBoard(boardId: string): Promise<void> {
+    const { error } = await supabase.from('kanban_boards').delete().eq('id', boardId);
+    if (error) throw error;
+  }
+
+  async createKanbanColumn(boardId: string, title: string, order: number, opts?: Partial<KanbanColumn>): Promise<KanbanColumn> {
+    const { data, error } = await supabase
+      .from('kanban_columns')
+      .insert({
+        board_id: boardId,
+        title,
+        order,
+        color: opts?.color ?? null,
+        is_completion_column: opts?.isCompletionColumn ?? false,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return this.mapColumn(data);
+  }
+
+  async updateKanbanColumn(columnId: string, data: Partial<Pick<KanbanColumn, 'title' | 'order' | 'color' | 'isCompletionColumn'>>): Promise<void> {
+    const update: any = {};
+    if (data.title !== undefined) update.title = data.title;
+    if (data.order !== undefined) update.order = data.order;
+    if (data.color !== undefined) update.color = data.color;
+    if (data.isCompletionColumn !== undefined) update.is_completion_column = data.isCompletionColumn;
+
+    const { error } = await supabase.from('kanban_columns').update(update).eq('id', columnId);
+    if (error) throw error;
+  }
+
+  async deleteKanbanColumn(columnId: string): Promise<void> {
+    const { error } = await supabase.from('kanban_columns').delete().eq('id', columnId);
+    if (error) throw error;
+  }
+
+  async reorderKanbanColumns(boardId: string, orderedColumnIds: string[]): Promise<void> {
+    const { error } = await supabase.rpc('reorder_kanban_columns', {
+      p_board_id: boardId,
+      p_column_ids: orderedColumnIds,
+    });
+    if (error) throw error;
+  }
+
+  async createKanbanCard(columnId: string, boardId: string, title: string, opts?: Partial<KanbanCard>): Promise<KanbanCard> {
+    const { data: existingCards } = await supabase
+      .from('kanban_cards')
+      .select('order')
+      .eq('column_id', columnId)
+      .order('order', { ascending: false })
+      .limit(1);
+
+    const nextOrder = existingCards && existingCards.length > 0 ? existingCards[0].order + 1 : 0;
+
+    const { data, error } = await supabase
+      .from('kanban_cards')
+      .insert({
+        column_id: columnId,
+        board_id: boardId,
+        title,
+        description: opts?.description ?? null,
+        order: opts?.order ?? nextOrder,
+        assigned_to_id: opts?.assignedToId ?? null,
+        due_date: opts?.dueDate ?? null,
+        labels: opts?.labels ?? [],
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return this.mapCard(data);
+  }
+
+  async updateKanbanCard(cardId: string, data: Partial<Pick<KanbanCard, 'title' | 'description' | 'order' | 'assignedToId' | 'dueDate' | 'labels'>>): Promise<void> {
+    const update: any = {};
+    if (data.title !== undefined) update.title = data.title;
+    if (data.description !== undefined) update.description = data.description;
+    if (data.order !== undefined) update.order = data.order;
+    if (data.assignedToId !== undefined) update.assigned_to_id = data.assignedToId;
+    if (data.dueDate !== undefined) update.due_date = data.dueDate;
+    if (data.labels !== undefined) update.labels = data.labels;
+
+    const { error } = await supabase.from('kanban_cards').update(update).eq('id', cardId);
+    if (error) throw error;
+  }
+
+  async deleteKanbanCard(cardId: string): Promise<void> {
+    const { error } = await supabase.from('kanban_cards').delete().eq('id', cardId);
+    if (error) throw error;
+  }
+
+  async moveKanbanCard(cardId: string, toColumnId: string, newOrder: number): Promise<void> {
+    const { error } = await supabase.rpc('move_kanban_card', {
+      p_card_id: cardId,
+      p_to_column: toColumnId,
+      p_new_order: newOrder,
+    });
+    if (error) throw error;
+  }
+
+  async reorderKanbanCards(columnId: string, orderedCardIds: string[]): Promise<void> {
+    if (orderedCardIds.length === 0) return;
+    const { error } = await supabase.rpc('reorder_kanban_cards', {
+      p_column_id: columnId,
+      p_card_ids: orderedCardIds,
+    });
+    if (error) throw error;
   }
 
   // ===== BULK OPERATIONS =====

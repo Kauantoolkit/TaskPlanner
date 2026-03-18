@@ -274,6 +274,7 @@ export function useDataRepository() {
     loading: loading || workspaceLoading,
     error,
     isSupabase: isSupabaseMode,
+    repository,
     addTask,
     updateTask,
     deleteTask,

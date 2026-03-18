@@ -52,6 +52,45 @@ export interface Task {
   workspaceId: string;
 }
 
+// ── Kanban Types ─────────────────────────────────────────────
+export interface KanbanBoard {
+  id: string;
+  taskId: string;
+  workspaceId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KanbanColumn {
+  id: string;
+  boardId: string;
+  title: string;
+  order: number;
+  color?: string;
+  isCompletionColumn: boolean;
+}
+
+export interface KanbanCard {
+  id: string;
+  columnId: string;
+  boardId: string;
+  title: string;
+  description?: string;
+  order: number;
+  assignedToId?: string;
+  dueDate?: string;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KanbanBoardFull {
+  board: KanbanBoard;
+  columns: KanbanColumn[];
+  cards: Record<string, KanbanCard[]>;
+}
+
 // DND Types
 export type SectionId = 'deliveries' | 'weekly' | 'permanent' | 'day';
 
