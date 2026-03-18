@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Calendar, GripVertical } from 'lucide-react';
+import { Calendar, Pencil } from 'lucide-react';
 import { KanbanCard as KanbanCardType } from '../../types';
 import { KanbanCardModal } from './KanbanCardModal';
 import { format, parseISO } from 'date-fns';
@@ -32,7 +32,8 @@ export function KanbanCardComponent({ card, columnId, onUpdate, onDelete }: Kanb
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDragging ? 'grabbing' : 'grab',
   };
 
   return (
@@ -41,17 +42,10 @@ export function KanbanCardComponent({ card, columnId, onUpdate, onDelete }: Kanb
         ref={setNodeRef}
         style={style}
         {...attributes}
-        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-3 cursor-pointer hover:shadow-md hover:border-blue-200 dark:hover:border-blue-700 transition-all group"
-        onClick={() => setModalOpen(true)}
+        {...listeners}
+        className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-3 hover:shadow-md hover:border-blue-200 dark:hover:border-blue-700 transition-all group select-none"
       >
-        <div className="flex items-start gap-2">
-          <div
-            {...listeners}
-            className="mt-0.5 p-0.5 cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={e => e.stopPropagation()}
-          >
-            <GripVertical size={14} />
-          </div>
+        <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col gap-1.5 flex-1 min-w-0">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-200 break-words leading-snug">
               {card.title}
@@ -76,6 +70,15 @@ export function KanbanCardComponent({ card, columnId, onUpdate, onDelete }: Kanb
               </span>
             )}
           </div>
+          {/* Botão de editar — stopPropagation para não iniciar drag */}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setModalOpen(true); }}
+            className="shrink-0 p-1 rounded text-gray-300 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-0 group-hover:opacity-100 transition-all"
+            title="Editar card"
+          >
+            <Pencil size={13} />
+          </button>
         </div>
       </div>
 

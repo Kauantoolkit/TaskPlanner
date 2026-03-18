@@ -333,3 +333,17 @@ BEGIN
   RETURN v_board_id;
 END;
 $$;
+
+-- ============================================================
+-- GRANTS — Necessário para o role authenticated ter acesso
+-- RLS sozinho não basta; o GRANT libera o acesso base à tabela
+-- ============================================================
+
+GRANT ALL ON kanban_boards  TO authenticated;
+GRANT ALL ON kanban_columns TO authenticated;
+GRANT ALL ON kanban_cards   TO authenticated;
+
+GRANT EXECUTE ON FUNCTION create_kanban_board_with_columns(uuid, uuid, text, jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION move_kanban_card(uuid, uuid, integer)                      TO authenticated;
+GRANT EXECUTE ON FUNCTION reorder_kanban_cards(uuid, uuid[])                         TO authenticated;
+GRANT EXECUTE ON FUNCTION reorder_kanban_columns(uuid, uuid[])                       TO authenticated;

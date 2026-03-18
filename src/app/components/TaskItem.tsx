@@ -27,7 +27,19 @@ interface TaskItemProps {
 }
 
 export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate, workspaceId }) => {
-  const [kanbanOpen, setKanbanOpen] = useState(false);
+  const [kanbanOpen, setKanbanOpen] = useState(() =>
+    sessionStorage.getItem('kanbanOpen') === task.id
+  );
+
+  const openKanban = () => {
+    sessionStorage.setItem('kanbanOpen', task.id);
+    setKanbanOpen(true);
+  };
+
+  const closeKanban = () => {
+    sessionStorage.removeItem('kanbanOpen');
+    setKanbanOpen(false);
+  };
   const {
     attributes,
     listeners,
@@ -58,6 +70,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
   // Calculate time-based status
   const getTimeStatus = (): 'normal' | 'yellow' | 'red' => {
     if (!task.scheduledTime || task.completed) return 'normal';
+
+    // Tasks de entrega têm seu próprio indicador de urgência — não aplica alerta de horário
+    if (task.isDelivery) return 'normal';
 
     // Só aplica alerta de tempo se a tarefa é de hoje
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -102,7 +117,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
         taskId={task.id}
         taskTitle={task.text}
         workspaceId={workspaceId ?? task.workspaceId}
-        onClose={() => setKanbanOpen(false)}
+        onClose={closeKanban}
       />
     )}
     <div ref={setNodeRef} style={style} {...attributes} className="w-full">
@@ -255,7 +270,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
               )}
               {task.isDelivery && (
                 <button
-                  onClick={e => { e.stopPropagation(); setKanbanOpen(true); }}
+                  onClick={e => { e.stopPropagation(); openKanban(); }}
                   className="flex items-center gap-1 text-[10px] md:text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-1.5 py-0.5 rounded transition-colors"
                   title="Abrir quadro Kanban"
                 >

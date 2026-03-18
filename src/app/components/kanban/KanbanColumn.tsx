@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { KanbanColumn as KanbanColumnType, KanbanCard } from '../../types';
 import { KanbanCardComponent } from './KanbanCard';
 
@@ -61,11 +61,11 @@ export function KanbanColumnComponent({
       {...attributes}
       className="flex flex-col w-64 shrink-0 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-850 shadow-sm"
     >
-      {/* Column header */}
-      <div className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border-b ${headerBg}`}>
-        <div {...listeners} className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 shrink-0">
-          <GripVertical size={14} />
-        </div>
+      {/* Column header — arrastar pelo header inteiro */}
+      <div
+        {...listeners}
+        className={`flex items-center gap-2 px-3 py-2.5 rounded-t-xl border-b cursor-grab active:cursor-grabbing select-none ${headerBg}`}
+      >
         <span className="flex-1 text-sm font-bold text-gray-700 dark:text-gray-200 truncate">
           {column.title}
         </span>
@@ -73,6 +73,7 @@ export function KanbanColumnComponent({
           {cards.length}
         </span>
         <button
+          onPointerDown={e => e.stopPropagation()}
           onClick={() => onColumnDeleted(column.id)}
           className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100"
           title="Remover coluna"
