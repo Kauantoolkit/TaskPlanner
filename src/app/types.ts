@@ -31,6 +31,11 @@ export interface Workspace {
   inviteCode?: string;
 }
 
+export interface DailyLog {
+  date: string;        // yyyy-MM-dd
+  description: string;
+}
+
 export interface Task {
   id: string;
   text: string;
@@ -41,6 +46,7 @@ export interface Task {
   categoryId?: string;
   isDelivery?: boolean;
   deliveryDate?: string;
+  dailyLogs?: DailyLog[];
   recurringType?: 'daily' | 'weekly';
   recurringDays?: number[];
   scheduledTime?: string;

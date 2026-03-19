@@ -195,7 +195,8 @@ function AppContent() {
   }, [tasks, formattedSelectedDate, searchQuery, currentDayOfWeek, settings.sortByTime]);
 
   const stats = useMemo(() => {
-    const dailyTasks = filteredTasks;
+    // Entregas duram vários dias — excluir da barra de progresso diário
+    const dailyTasks = filteredTasks.filter(t => !t.isDelivery);
     const completedCount = dailyTasks.filter(task => {
       if (task.isPermanent) {
         return task.completedDates.includes(formattedSelectedDate);
@@ -248,6 +249,9 @@ function AppContent() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
+    // Entregas usam logs diários — não têm toggle de conclusão
+    if (task.isDelivery) return;
+
     // Tasks permanentes e semanais usam completedDates
     if (task.isPermanent || task.recurringType === 'weekly') {
       const isCompleted = task.completedDates.includes(targetDate);
@@ -258,6 +262,14 @@ function AppContent() {
     } else {
       await updateTask(id, { completed: !task.completed });
     }
+  };
+
+  const handleAddDailyLog = async (taskId: string, date: string, description: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const existing = task.dailyLogs ?? [];
+    const filtered = existing.filter(l => l.date !== date);
+    await updateTask(taskId, { dailyLogs: [...filtered, { date, description }] });
   };
 
   const handleDeleteTask = async (id: string) => {
@@ -492,6 +504,7 @@ function AppContent() {
                                     onDelete={handleDeleteTask}
                                     onEdit={handleEditTask}
                                     selectedDate={formattedSelectedDate}
+                                    onAddDailyLog={handleAddDailyLog}
                                   />
                                 ))}
                             </div>

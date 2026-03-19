@@ -122,6 +122,18 @@ export function useKanban(taskId: string | null) {
     await load();
   };
 
+  const updateColumn = async (
+    columnId: string,
+    data: Partial<Pick<import('../types').KanbanColumn, 'title' | 'color' | 'isCompletionColumn'>>
+  ) => {
+    if (isSupabase) {
+      await repository.updateKanbanColumn(columnId, data);
+    } else {
+      localUtils.updateColumnLocal(columnId, data);
+    }
+    await load();
+  };
+
   const deleteColumn = async (columnId: string) => {
     if (isSupabase) {
       await repository.deleteKanbanColumn(columnId);
@@ -167,6 +179,7 @@ export function useKanban(taskId: string | null) {
     updateCard,
     deleteCard,
     addColumn,
+    updateColumn,
     deleteColumn,
     reorderColumns,
     completionPercent,

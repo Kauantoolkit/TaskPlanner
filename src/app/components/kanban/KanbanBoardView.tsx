@@ -13,19 +13,23 @@ import {
   sortableKeyboardCoordinates,
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { X, Plus, Loader2 } from 'lucide-react';
+import { X, Plus, Loader2, BookOpen } from 'lucide-react';
 import { useKanban } from '../../hooks/useKanban';
 import { KanbanColumnComponent } from './KanbanColumn';
 import { KanbanProgress } from './KanbanProgress';
+import { DailyLog } from '../../types';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface KanbanBoardViewProps {
   taskId: string;
   taskTitle: string;
   workspaceId: string;
+  dailyLogs?: DailyLog[];
   onClose: () => void;
 }
 
-export function KanbanBoardView({ taskId, taskTitle, workspaceId, onClose }: KanbanBoardViewProps) {
+export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = [], onClose }: KanbanBoardViewProps) {
   const {
     boardFull,
     loading,
@@ -35,6 +39,7 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, onClose }: Kan
     updateCard,
     deleteCard,
     addColumn,
+    updateColumn,
     deleteColumn,
     reorderColumns,
     completionPercent,
@@ -140,6 +145,29 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, onClose }: Kan
       {!loading && boardFull && (
         <>
           <KanbanProgress percent={completionPercent()} />
+
+          {/* Daily progress diary */}
+          {dailyLogs.length > 0 && (
+            <div className="shrink-0 px-4 py-3 border-b dark:border-gray-800 bg-white dark:bg-gray-900">
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpen size={14} className="text-green-500" />
+                <span className="text-xs font-black uppercase tracking-widest text-gray-400">Diário de Progresso</span>
+              </div>
+              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                {[...dailyLogs]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map(log => (
+                    <div key={log.date} className="flex gap-2 text-sm">
+                      <span className="shrink-0 text-[11px] font-bold text-green-600 dark:text-green-400 pt-0.5 min-w-[60px]">
+                        {format(parseISO(log.date), "dd/MM", { locale: ptBR })}
+                      </span>
+                      <span className="text-gray-600 dark:text-gray-300 break-words">{log.description}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-x-auto">
             <DndContext
               sensors={sensors}
@@ -159,6 +187,7 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, onClose }: Kan
                         onCardAdded={addCard}
                         onCardUpdated={updateCard}
                         onCardDeleted={deleteCard}
+                        onColumnUpdated={updateColumn}
                         onColumnDeleted={deleteColumn}
                       />
                     </div>

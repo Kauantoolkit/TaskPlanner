@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil, LayoutDashboard } from 'lucide-react';
+import { Check, Trash2, Repeat, Calendar, Tag, Target, Clock, Pencil, LayoutDashboard, Plus, BookOpen } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripIcon } from './GripIcon';
@@ -21,15 +21,18 @@ interface TaskItemProps {
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit?: (id: string) => void;
+  onAddDailyLog?: (id: string, date: string, description: string) => void;
   selectedDate?: string;
   id?: string;
   workspaceId?: string;
 }
 
-export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, selectedDate, workspaceId }) => {
+export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, onDelete, onEdit, onAddDailyLog, selectedDate, workspaceId }) => {
   const [kanbanOpen, setKanbanOpen] = useState(() =>
     sessionStorage.getItem('kanbanOpen') === task.id
   );
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [logText, setLogText] = useState('');
 
   const openKanban = () => {
     sessionStorage.setItem('kanbanOpen', task.id);
@@ -101,6 +104,19 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
 
   const timeStatus = getTimeStatus();
 
+  // Daily log helpers (delivery tasks)
+  const todayLog = task.isDelivery
+    ? (task.dailyLogs ?? []).find(l => l.date === (selectedDate ?? format(new Date(), 'yyyy-MM-dd')))
+    : undefined;
+
+  const handleSubmitLog = () => {
+    if (!logText.trim() || !onAddDailyLog) return;
+    const date = selectedDate ?? format(new Date(), 'yyyy-MM-dd');
+    onAddDailyLog(task.id, date, logText.trim());
+    setLogText('');
+    setShowLogForm(false);
+  };
+
   // Format minutes
   const formatMinutesToReadable = (minutes: number): string => {
     const hours = Math.floor(minutes / 60);
@@ -117,6 +133,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
         taskId={task.id}
         taskTitle={task.text}
         workspaceId={workspaceId ?? task.workspaceId}
+        dailyLogs={task.dailyLogs ?? []}
         onClose={closeKanban}
       />
     )}
@@ -180,6 +197,26 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
             </div>
           )}
 
+          {task.isDelivery ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (todayLog) {
+                  setLogText(todayLog.description);
+                }
+                setShowLogForm(v => !v);
+              }}
+              title={todayLog ? 'Editar progresso do dia' : 'Registrar progresso do dia'}
+              className={cn(
+                "w-6 h-6 md:w-7 md:h-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0 active:scale-90",
+                todayLog
+                  ? "bg-green-500 border-green-500 text-white"
+                  : "border-green-400 dark:border-green-600 text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30"
+              )}
+            >
+              {todayLog ? <Check size={13} strokeWidth={4} /> : <Plus size={13} strokeWidth={3} />}
+            </button>
+          ) : (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -209,6 +246,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
               )}
             </AnimatePresence>
           </button>
+          )}
 
           <div className="flex flex-col flex-1 min-w-0">
             <span className={cn(
@@ -303,6 +341,48 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, category, onToggle, on
           </button>
         </div>
       </Motion.div>
+
+      {/* Daily log form — only for delivery tasks */}
+      {task.isDelivery && showLogForm && (
+        <div className="mt-1.5 rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-3 flex flex-col gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-green-700 dark:text-green-400">
+            <BookOpen size={12} />
+            O que você avançou hoje nessa entrega?
+          </div>
+          <textarea
+            autoFocus
+            rows={2}
+            value={logText}
+            onChange={e => setLogText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmitLog(); }
+              if (e.key === 'Escape') { setShowLogForm(false); setLogText(''); }
+            }}
+            placeholder="Descreva o que foi feito..."
+            className="w-full text-sm rounded-lg border border-green-200 dark:border-green-700 bg-white dark:bg-gray-900 dark:text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSubmitLog}
+              disabled={!logText.trim()}
+              className="flex-1 text-xs py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 transition-colors font-semibold"
+            >
+              Salvar
+            </button>
+            <button
+              onClick={() => { setShowLogForm(false); setLogText(''); }}
+              className="text-xs px-3 py-1.5 rounded-lg border dark:border-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              ×
+            </button>
+          </div>
+          {todayLog && (
+            <p className="text-[11px] text-green-600 dark:text-green-400 italic">
+              Log atual: "{todayLog.description}"
+            </p>
+          )}
+        </div>
+      )}
     </div>
     </>
   );
