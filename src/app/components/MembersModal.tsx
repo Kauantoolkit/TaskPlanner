@@ -100,7 +100,7 @@ export function MembersModal({ onClose }: MembersModalProps) {
           <div className="p-3 md:p-6 overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
 
             {/* Invite Code Section */}
-            {isOwner() && (
+            {isOwner && (
               <div className="bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-100 dark:border-blue-900">
                 <p className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-3">
                   Código de Convite
@@ -138,7 +138,7 @@ export function MembersModal({ onClose }: MembersModalProps) {
               </div>
             )}
 
-            {!isOwner() && (
+            {!isOwner && (
               <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-center">
                 <p className="text-gray-600 dark:text-gray-400 text-sm font-bold">
                   Peça ao dono do workspace o código de convite para adicionar membros.
@@ -182,7 +182,7 @@ export function MembersModal({ onClose }: MembersModalProps) {
                       </div>
                     </div>
 
-                    {isOwner() && member.role !== 'owner' && (
+                    {isOwner && member.role !== 'owner' && (
                       <button
                         onClick={() => setConfirmDelete({ id: member.id, name: member.name })}
                         className="opacity-0 group-hover:opacity-100 min-w-[36px] min-h-[36px] w-9 h-9 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all shrink-0"

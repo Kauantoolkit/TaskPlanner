@@ -1,28 +1,17 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
-const isUrlValid = supabaseUrl.trim().length > 0;
-const isKeyValid = supabaseAnonKey.trim().length > 0;
-export const isSupabaseConfigured = isUrlValid && isKeyValid;
+/** Sem as duas variáveis o app mostra a tela de configuração em vez de rodar. */
+export const isSupabaseConfigured = supabaseUrl.length > 0 && supabaseAnonKey.length > 0;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const supabase: SupabaseClient<any, 'public'> = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-      global: {
-        headers: {
-          'x-client-info': 'taskplanner-web'
-        }
-      }
-    })
-  : createClient('https://placeholder.supabase.co', 'placeholder', {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+export const supabase = createClient<Database>(
+  isSupabaseConfigured ? supabaseUrl : 'http://localhost',
+  isSupabaseConfigured ? supabaseAnonKey : 'missing-anon-key',
+  {
+    auth: { persistSession: isSupabaseConfigured, autoRefreshToken: isSupabaseConfigured },
+    global: { headers: { 'x-client-info': 'taskplanner-web' } },
+  },
+);

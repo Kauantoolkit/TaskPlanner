@@ -1,64 +1,66 @@
+import type { IsoDate } from './domain/tasks';
+import type { MemberRole, WorkspaceType } from './lib/database.types';
+
+export type { Task, TaskDraft, TaskKind, IsoDate } from './domain/tasks';
+export type { MemberRole, WorkspaceType };
+
 export interface Category {
   id: string;
   name: string;
   color: string;
 }
 
-export interface Settings {
+/** Preferências do usuário (iguais em todos os workspaces). */
+export interface Preferences {
   darkMode: boolean;
   showCompleted: boolean;
   confirmDelete: boolean;
   sortByTime: boolean;
 }
 
-// Modelo de Usuário
-export interface User {
+export const DEFAULT_PREFERENCES: Preferences = {
+  darkMode: false,
+  showCompleted: true,
+  confirmDelete: true,
+  sortByTime: true,
+};
+
+/** Usuário logado. */
+export interface CurrentUser {
   id: string;
   name: string;
   email: string;
-  avatar?: string;
-  role: 'owner' | 'member';
 }
 
-// Modelo de Workspace
+/** Linha de workspace_members. `id` é o que as tarefas referenciam. */
+export interface Member {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: MemberRole;
+}
+
 export interface Workspace {
   id: string;
   name: string;
-  type: 'family' | 'business' | 'personal';
+  type: WorkspaceType;
   ownerId: string;
-  memberIds: string[];
-  createdAt: string;
-  inviteCode?: string;
+  /** Visível para membros do workspace; só o dono gera um novo. */
+  inviteCode: string | null;
+  createdAt: string | null;
 }
 
+/** "O que avancei hoje" numa entrega. Um por tarefa por dia. */
 export interface DailyLog {
-  date: string;        // yyyy-MM-dd
-  description: string;
-}
-
-export interface Task {
   id: string;
-  text: string;
-  isPermanent: boolean;
-  completedDates: string[];
-  date?: string;
-  completed?: boolean;
-  categoryId?: string;
-  isDelivery?: boolean;
-  deliveryDate?: string;
-  dailyLogs?: DailyLog[];
-  recurringType?: 'daily' | 'weekly';
-  recurringDays?: number[];
-  scheduledTime?: string;
-  estimatedDurationMinutes?: number;
-  yellowAlertMinutes?: number;
-  startedAt?: string;
-  assignedToId: string;
-  createdById: string;
-  workspaceId: string;
+  taskId: string;
+  date: IsoDate;
+  description: string;
+  authorId: string | null;
 }
 
-// ── Kanban Types ─────────────────────────────────────────────
+// ── Kanban ───────────────────────────────────────────────────
 export interface KanbanBoard {
   id: string;
   taskId: string;
@@ -96,14 +98,3 @@ export interface KanbanBoardFull {
   columns: KanbanColumn[];
   cards: Record<string, KanbanCard[]>;
 }
-
-// DND Types
-export type SectionId = 'deliveries' | 'weekly' | 'permanent' | 'day';
-
-export type DropResult = {
-  taskId: string;
-  sectionId: SectionId | null;
-  date: string;
-};
-
-export type ViewType = 'today' | 'upcoming' | 'permanent';

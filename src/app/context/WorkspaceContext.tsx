@@ -1,383 +1,147 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
-import { Workspace, User } from '../types';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import * as api from '../data/api';
+import { useCurrentUser } from '../auth/AuthProvider';
+import type { CurrentUser, Member, Workspace, WorkspaceType } from '../types';
+
+const STORAGE_KEY = 'currentWorkspaceId';
 
 interface WorkspaceContextType {
-  currentWorkspace: Workspace | null;
+  currentUser: CurrentUser;
   workspaces: Workspace[];
-  currentUser: User | null;
+  /** null só enquanto carrega */
+  currentWorkspace: Workspace | null;
+  /** workspace_members.id do usuário no workspace atual */
   currentMemberId: string;
-  members: User[];
+  members: Member[];
   loading: boolean;
-  createWorkspace: (name: string, type: Workspace['type']) => Promise<void>;
-  switchWorkspace: (workspaceId: string) => Promise<void>;
+  createWorkspace: (name: string, type: WorkspaceType) => Promise<void>;
+  switchWorkspace: (workspaceId: string) => void;
   joinWorkspace: (code: string) => Promise<void>;
   regenerateInviteCode: () => Promise<void>;
-  addMember: (name: string, email: string) => Promise<void>;
-  removeMember: (userId: string) => Promise<void>;
-  canCreateForOthers: () => boolean;
-  isOwner: () => boolean;
-  getMemberById: (id: string) => User | undefined;
+  /** Por workspace_members.id */
+  removeMember: (memberId: string) => Promise<void>;
+  isOwner: boolean;
+  getMemberById: (memberId: string) => Member | undefined;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-const LOCAL_USER: User = {
-  id: 'local-user',
-  name: 'Usuário Local',
-  email: 'local@planner.com',
-  role: 'owner',
-};
-
-const LOCAL_WORKSPACE: Workspace = {
-  id: 'workspace-local',
-  name: 'Meu Espaço',
-  type: 'personal',
-  ownerId: 'local-user',
-  memberIds: ['local-user'],
-  createdAt: new Date().toISOString(),
-};
-
-export function WorkspaceProvider({ children }: { children: ReactNode }): React.ReactElement {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('');
-  const [currentMemberId, setCurrentMemberId] = useState<string>('');
-  const [members, setMembers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const loadMembersForWorkspace = useCallback(async (workspaceId: string) => {
-    if (!isSupabaseConfigured) {
-      setMembers([LOCAL_USER]);
-      return;
-    }
-    try {
-      const { data } = await supabase
-        .rpc('get_workspace_members', { p_workspace_id: workspaceId });
-
-      if (data) {
-        setMembers(data.map((m: any) => ({
-          id: m.user_id || m.id,
-          name: m.name || 'Membro',
-          email: m.email || '',
-          role: m.role as 'owner' | 'member',
-        })));
-      }
-    } catch (err) {
-      console.error('Error loading members:', err);
-    }
-  }, []);
-
-  const loadWorkspaces = useCallback(async () => {
-    if (!isSupabaseConfigured) {
-      setWorkspaces([LOCAL_WORKSPACE]);
-      setCurrentWorkspaceId(LOCAL_WORKSPACE.id);
-      setCurrentMemberId(LOCAL_USER.id);
-      setCurrentUser(LOCAL_USER);
-      setMembers([LOCAL_USER]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      setCurrentUser({
-        id: user.id,
-        name: user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário',
-        email: user.email || '',
-        role: 'owner',
-      });
-
-      // Load all workspace_members rows for this user
-      const { data: memberRows } = await supabase
-        .from('workspace_members')
-        .select('workspace_id, id, role')
-        .eq('user_id', user.id);
-
-      const memberWorkspaceIds = [...new Set((memberRows || []).map(m => m.workspace_id))];
-
-      // Also include owned workspaces (in case member row is missing)
-      // NOTE: invite_code is loaded separately to avoid breaking if migration #4 hasn't run
-      const { data: ownedWs } = await supabase
-        .from('workspaces')
-        .select('id, name, type, owner_id, created_at')
-        .eq('owner_id', user.id);
-
-      const ownedIds = (ownedWs || []).map(w => w.id);
-      const allIds = [...new Set([...memberWorkspaceIds, ...ownedIds])];
-
-      let allWorkspacesData: any[] = [];
-
-      if (allIds.length > 0) {
-        const { data: wsData } = await supabase
-          .from('workspaces')
-          .select('id, name, type, owner_id, created_at')
-          .in('id', allIds);
-        allWorkspacesData = wsData || [];
-      }
-
-      // Try to load invite_code separately (only works after migration #4)
-      if (allWorkspacesData.length > 0) {
-        try {
-          const { data: wsWithCode } = await supabase
-            .from('workspaces')
-            .select('id, invite_code')
-            .in('id', allWorkspacesData.map(w => w.id));
-          if (wsWithCode) {
-            const codeMap: Record<string, string> = {};
-            wsWithCode.forEach(w => { if (w.invite_code) codeMap[w.id] = w.invite_code; });
-            allWorkspacesData = allWorkspacesData.map(w => ({ ...w, invite_code: codeMap[w.id] }));
-          }
-        } catch {
-          // invite_code column not yet added — ignored until migration runs
-        }
-      }
-
-      if (allWorkspacesData.length === 0) {
-        // Create initial personal workspace (only when truly no workspace exists)
-        const { data: rows, error: createError } = await supabase
-          .rpc('create_workspace', { p_name: 'Meu Workspace', p_type: 'personal' });
-        const newWs = rows?.[0];
-
-        if (createError) throw createError;
-        if (newWs) {
-          setWorkspaces([{
-            id: newWs.workspace_id, name: newWs.name, type: newWs.type,
-            ownerId: newWs.owner_id, memberIds: [], createdAt: newWs.created_at,
-            inviteCode: newWs.invite_code,
-          }]);
-          setCurrentWorkspaceId(newWs.workspace_id);
-          setCurrentMemberId(newWs.member_id);
-          localStorage.setItem('currentWorkspaceId', newWs.workspace_id);
-          await loadMembersForWorkspace(newWs.workspace_id);
-          setLoading(false);
-          return;
-        }
-      }
-
-      const mapped: Workspace[] = allWorkspacesData.map(w => ({
-        id: w.id, name: w.name, type: w.type,
-        ownerId: w.owner_id, memberIds: [], createdAt: w.created_at,
-        inviteCode: w.invite_code,
-      }));
-
-      // Restore last selected workspace or use first
-      const savedId = localStorage.getItem('currentWorkspaceId');
-      // Prefer saved workspace only if the user has a member row for it
-      // (avoids sticking to a rogue empty workspace created by a previous bug)
-      const savedHasMembership = savedId && (memberRows || []).some(m => m.workspace_id === savedId);
-      const selectedId = savedHasMembership && mapped.find(w => w.id === savedId)
-        ? savedId
-        : mapped[0]?.id || '';
-
-      // Find member row for selected workspace
-      const memberRow = (memberRows || []).find(m => m.workspace_id === selectedId);
-      let resolvedMemberId = memberRow?.id || '';
-
-      if (!resolvedMemberId && selectedId) {
-        const { data: mRow } = await supabase
-          .from('workspace_members')
-          .select('id')
-          .eq('workspace_id', selectedId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        resolvedMemberId = mRow?.id || '';
-      }
-
-      // Set everything atomically (React 18 batches these in async)
-      setWorkspaces(mapped);
-      setCurrentWorkspaceId(selectedId);
-      setCurrentMemberId(resolvedMemberId);
-
-      if (selectedId) {
-        await loadMembersForWorkspace(selectedId);
-      }
-    } catch (err) {
-      console.error('Error loading workspaces:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadMembersForWorkspace]);
-
-  useEffect(() => {
-    loadWorkspaces();
-  }, [loadWorkspaces]);
-
-  const currentWorkspace = useMemo(
-    () => workspaces.find(w => w.id === currentWorkspaceId) || null,
-    [workspaces, currentWorkspaceId]
-  );
-
-  const switchWorkspace = useCallback(async (workspaceId: string) => {
-    localStorage.setItem('currentWorkspaceId', workspaceId);
-
-    if (!isSupabaseConfigured) {
-      setCurrentWorkspaceId(workspaceId);
-      setCurrentMemberId(LOCAL_USER.id);
-      return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: memberRow } = await supabase
-      .from('workspace_members')
-      .select('id')
-      .eq('workspace_id', workspaceId)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    // Set both together after all async work (React 18 batches these)
-    setCurrentWorkspaceId(workspaceId);
-    setCurrentMemberId(memberRow?.id || '');
-    await loadMembersForWorkspace(workspaceId);
-  }, [loadMembersForWorkspace]);
-
-  const createWorkspace = useCallback(async (name: string, type: Workspace['type']) => {
-    if (!isSupabaseConfigured) {
-      const newWs: Workspace = {
-        id: `workspace-${Date.now()}`,
-        name, type,
-        ownerId: LOCAL_USER.id,
-        memberIds: [LOCAL_USER.id],
-        createdAt: new Date().toISOString(),
-      };
-      setWorkspaces(prev => [...prev, newWs]);
-      setCurrentWorkspaceId(newWs.id);
-      setCurrentMemberId(LOCAL_USER.id);
-      return;
-    }
-
-    const { data: rows, error } = await supabase
-      .rpc('create_workspace', { p_name: name, p_type: type });
-
-    if (error) throw error;
-    const newWs = rows[0];
-
-    const workspace: Workspace = {
-      id: newWs.workspace_id, name: newWs.name, type: newWs.type,
-      ownerId: newWs.owner_id, memberIds: [],
-      createdAt: newWs.created_at, inviteCode: newWs.invite_code,
-    };
-
-    setWorkspaces(prev => [...prev, workspace]);
-    setCurrentWorkspaceId(newWs.workspace_id);
-    setCurrentMemberId(newWs.member_id);
-    localStorage.setItem('currentWorkspaceId', newWs.workspace_id);
-    await loadMembersForWorkspace(newWs.workspace_id);
-  }, [loadMembersForWorkspace]);
-
-  const joinWorkspace = useCallback(async (code: string) => {
-    if (!isSupabaseConfigured) return;
-
-    // Code is validated server-side; the RPC inserts the member row as 'member'
-    const { data: rows, error } = await supabase
-      .rpc('join_workspace', { p_code: code.trim() });
-
-    if (error || !rows || rows.length === 0) throw new Error('Código de convite inválido');
-    const ws = rows[0];
-
-    const newWorkspace: Workspace = {
-      id: ws.workspace_id, name: ws.name, type: ws.type,
-      ownerId: ws.owner_id, memberIds: [], createdAt: ws.created_at,
-    };
-
-    setWorkspaces(prev => prev.find(w => w.id === ws.workspace_id) ? prev : [...prev, newWorkspace]);
-    setCurrentWorkspaceId(ws.workspace_id);
-    setCurrentMemberId(ws.member_id);
-    localStorage.setItem('currentWorkspaceId', ws.workspace_id);
-    await loadMembersForWorkspace(ws.workspace_id);
-  }, [loadMembersForWorkspace]);
-
-  const regenerateInviteCode = useCallback(async () => {
-    if (!isSupabaseConfigured || !currentWorkspaceId) return;
-
-    const { data: newCode, error } = await supabase
-      .rpc('regenerate_invite_code', { p_workspace_id: currentWorkspaceId });
-
-    if (error) throw error;
-
-    setWorkspaces(prev => prev.map(w =>
-      w.id === currentWorkspaceId ? { ...w, inviteCode: newCode } : w
-    ));
-  }, [currentWorkspaceId]);
-
-  const addMember = useCallback(async (_name: string, _email: string) => {
-    // Real membership happens via invite code (joinWorkspace)
-    // Kept for local mode compatibility only
-    if (!isSupabaseConfigured) {
-      setMembers(prev => [...prev, {
-        id: `user-${Date.now()}`,
-        name: _name, email: _email, role: 'member',
-      }]);
-    }
-  }, []);
-
-  const removeMember = useCallback(async (userId: string) => {
-    if (!currentWorkspace || userId === currentWorkspace.ownerId) return;
-
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from('workspace_members')
-        .delete()
-        .eq('workspace_id', currentWorkspaceId)
-        .eq('user_id', userId);
-      if (error) throw error;
-    }
-
-    setMembers(prev => prev.filter(m => m.id !== userId));
-  }, [currentWorkspace, currentWorkspaceId]);
-
-  const canCreateForOthers = useCallback(() => {
-    if (!currentUser || !currentWorkspace) return false;
-    return currentUser.id === currentWorkspace.ownerId;
-  }, [currentUser, currentWorkspace]);
-
-  const isOwner = useCallback(() => {
-    if (!currentUser || !currentWorkspace) return false;
-    return currentUser.id === currentWorkspace.ownerId;
-  }, [currentUser, currentWorkspace]);
-
-  const getMemberById = useCallback((id: string) => {
-    return members.find(m => m.id === id);
-  }, [members]);
-
-  const value = useMemo(() => ({
-    currentWorkspace,
-    workspaces,
-    currentUser,
-    currentMemberId,
-    members,
-    loading,
-    createWorkspace,
-    switchWorkspace,
-    joinWorkspace,
-    regenerateInviteCode,
-    addMember,
-    removeMember,
-    canCreateForOthers,
-    isOwner,
-    getMemberById,
-  }), [
-    currentWorkspace, workspaces, currentUser, currentMemberId, members, loading,
-    createWorkspace, switchWorkspace, joinWorkspace, regenerateInviteCode,
-    addMember, removeMember, canCreateForOthers, isOwner, getMemberById,
-  ]);
-
-  return (
-    <WorkspaceContext.Provider value={value}>
-      {children}
-    </WorkspaceContext.Provider>
-  );
+function readSavedWorkspaceId(): string | null {
+  try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
+}
+function saveWorkspaceId(id: string) {
+  try { localStorage.setItem(STORAGE_KEY, id); } catch { /* aba anônima etc. */ }
 }
 
-export const useWorkspace = () => {
-  const context = useContext(WorkspaceContext);
-  if (!context) throw new Error('useWorkspace must be used within WorkspaceProvider');
-  return context;
+export const workspaceKeys = {
+  mine: (userId: string) => ['workspaces', userId] as const,
+  members: (workspaceId: string) => ['members', workspaceId] as const,
 };
+
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const currentUser = useCurrentUser();
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(readSavedWorkspaceId);
+
+  const mine = useQuery({
+    queryKey: workspaceKeys.mine(currentUser.id),
+    queryFn: () => api.fetchMyWorkspaces(currentUser.id),
+  });
+
+  // Primeiro acesso: cria o workspace pessoal (uma vez por montagem)
+  const creatingFirst = useRef(false);
+  useEffect(() => {
+    if (!mine.data || mine.data.workspaces.length > 0 || creatingFirst.current) return;
+    creatingFirst.current = true;
+    api.createWorkspace('Meu Workspace', 'personal')
+      .then(async ({ workspace }) => {
+        await api.seedDefaultCategories(workspace.id);
+        setSelectedId(workspace.id);
+        saveWorkspaceId(workspace.id);
+        await queryClient.invalidateQueries({ queryKey: workspaceKeys.mine(currentUser.id) });
+      })
+      .catch(err => toast.error(`Não foi possível criar seu workspace: ${err.message}`));
+  }, [mine.data, currentUser.id, queryClient]);
+
+  const workspaces = mine.data?.workspaces ?? [];
+  const currentWorkspace =
+    workspaces.find(w => w.id === selectedId) ?? workspaces[0] ?? null;
+  const currentMemberId = currentWorkspace ? mine.data?.memberIdByWorkspace[currentWorkspace.id] ?? '' : '';
+
+  const membersQuery = useQuery({
+    queryKey: workspaceKeys.members(currentWorkspace?.id ?? ''),
+    queryFn: () => api.fetchMembers(currentWorkspace!.id),
+    enabled: !!currentWorkspace,
+  });
+  const members = membersQuery.data ?? [];
+
+  const refreshMine = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: workspaceKeys.mine(currentUser.id) }),
+    [queryClient, currentUser.id],
+  );
+
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    saveWorkspaceId(id);
+  }, []);
+
+  const createWorkspace = useCallback(async (name: string, type: WorkspaceType) => {
+    const { workspace } = await api.createWorkspace(name, type);
+    await api.seedDefaultCategories(workspace.id);
+    await refreshMine();
+    select(workspace.id);
+  }, [refreshMine, select]);
+
+  const joinWorkspace = useCallback(async (code: string) => {
+    const { workspace } = await api.joinWorkspace(code);
+    await refreshMine();
+    select(workspace.id);
+  }, [refreshMine, select]);
+
+  const regenerate = useMutation({
+    mutationFn: () => api.regenerateInviteCode(currentWorkspace!.id),
+    onSuccess: refreshMine,
+  });
+
+  const remove = useMutation({
+    mutationFn: api.removeMember,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: workspaceKeys.members(currentWorkspace?.id ?? '') }),
+  });
+
+  const getMemberById = useCallback((id: string) => members.find(m => m.id === id), [members]);
+
+  const value = useMemo<WorkspaceContextType>(() => ({
+    currentUser,
+    workspaces,
+    currentWorkspace,
+    currentMemberId,
+    members,
+    loading: mine.isPending || (mine.data?.workspaces.length === 0) || !currentWorkspace,
+    createWorkspace,
+    switchWorkspace: select,
+    joinWorkspace,
+    regenerateInviteCode: async () => { await regenerate.mutateAsync(); },
+    removeMember: async (memberId: string) => { await remove.mutateAsync(memberId); },
+    isOwner: !!currentWorkspace && currentWorkspace.ownerId === currentUser.id,
+    getMemberById,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [currentUser, mine.data, mine.isPending, currentWorkspace?.id, currentMemberId, members,
+       createWorkspace, select, joinWorkspace, getMemberById]);
+
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+}
+
+export function useWorkspace(): WorkspaceContextType {
+  const ctx = useContext(WorkspaceContext);
+  if (!ctx) throw new Error('useWorkspace precisa estar dentro de <WorkspaceProvider>');
+  return ctx;
+}
+
+/** Workspace atual, para componentes que só renderizam depois do carregamento. */
+export function useActiveWorkspace(): { workspace: Workspace; memberId: string } {
+  const { currentWorkspace, currentMemberId } = useWorkspace();
+  if (!currentWorkspace) throw new Error('useActiveWorkspace usado antes do workspace carregar');
+  return { workspace: currentWorkspace, memberId: currentMemberId };
+}

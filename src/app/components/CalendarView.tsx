@@ -3,7 +3,8 @@ import { DayPicker, DayContentProps } from 'react-day-picker';
 import { ptBR } from 'date-fns/locale';
 import { format, isToday } from 'date-fns';
 import { Plus, ListTodo, Clock, Target, Repeat, Calendar } from 'lucide-react';
-import { Task, Category } from '../types';
+import { Category, DailyLog } from '../types';
+import { dayProgress, isDoneOn, occursOn, tasksForDay, toIsoDate, type IsoDate, type Task } from '../domain/tasks';
 import { TaskItem } from './TaskItem';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -18,7 +19,11 @@ interface CalendarViewProps {
   categories: Category[];
   selectedDate: Date;
   onDateChange: (date: Date) => void;
-  onToggleTask: (id: string, date: string) => void;
+  now: Date;
+  sortByTime: boolean;
+  dailyLogs: DailyLog[];
+  onToggleTask: (task: Task, day: IsoDate) => void;
+  onSaveLog: (taskId: string, date: IsoDate, description: string) => void;
   onDeleteTask: (id: string) => void;
   onAddTask: () => void;
   onEditTask?: (id: string) => void;
@@ -26,44 +31,10 @@ interface CalendarViewProps {
 
 // ─── pure helpers ──────────────────────────────────────────────────────────────
 
-// Todas as tarefas visíveis num dia (para o painel lateral)
-function getTasksForDate(tasks: Task[], date: Date): Task[] {
-  const dateStr = format(date, 'yyyy-MM-dd');
-  const dow = date.getDay();
-  return tasks.filter(t => {
-    if (t.isPermanent) return true;
-    if (t.recurringType === 'weekly' && t.recurringDays?.includes(dow)) return true;
-    if (t.isDelivery && t.deliveryDate) return dateStr <= t.deliveryDate;
-    return t.date === dateStr;
-  });
-}
-
-// Tarefas que geram bolinha no calendário — exclui permanentes
-// (aparecem todo dia e não carregam informação diferencial)
-function getSignificantTasksForDate(tasks: Task[], date: Date): Task[] {
-  const dateStr = format(date, 'yyyy-MM-dd');
-  const dow = date.getDay();
-  return tasks.filter(t => {
-    if (t.isPermanent) return false;
-    if (t.recurringType === 'weekly' && t.recurringDays?.includes(dow)) return true;
-    if (t.isDelivery && t.deliveryDate) return dateStr <= t.deliveryDate;
-    return t.date === dateStr;
-  });
-}
-
-function isTaskDoneOnDate(task: Task, dateStr: string): boolean {
-  if (task.isPermanent || task.recurringType === 'weekly') {
-    return task.completedDates.includes(dateStr);
-  }
-  return !!task.completed;
-}
-
-function sortByTime(tasks: Task[]): Task[] {
-  return [...tasks].sort((a, b) => {
-    const tA = a.scheduledTime || '23:59';
-    const tB = b.scheduledTime || '23:59';
-    return tA.localeCompare(tB);
-  });
+// Tarefas que geram bolinha no calendário — exclui as de todo dia
+// (aparecem sempre e não carregam informação diferencial)
+function significantTasksOn(tasks: Task[], day: IsoDate): Task[] {
+  return tasks.filter(t => t.kind !== 'daily' && occursOn(t, day));
 }
 
 // ─── calendar CSS ──────────────────────────────────────────────────────────────
@@ -109,7 +80,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   categories,
   selectedDate,
   onDateChange,
+  now,
+  sortByTime,
+  dailyLogs,
   onToggleTask,
+  onSaveLog,
   onDeleteTask,
   onAddTask,
   onEditTask,
@@ -120,32 +95,26 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setCalendarMonth(selectedDate);
   }, [selectedDate]);
 
-  const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
+  const day = toIsoDate(selectedDate);
 
-  // Tasks for selected day sorted by time
-  const dayTasks = useMemo(
-    () => sortByTime(getTasksForDate(tasks, selectedDate)),
-    [tasks, selectedDate]
-  );
+  const dayTasks = useMemo(() => tasksForDay(tasks, day, { sortByTime }), [tasks, day, sortByTime]);
 
-  // Progress stats for selected day
   const stats = useMemo(() => {
-    const done = dayTasks.filter(t => isTaskDoneOnDate(t, formattedSelectedDate)).length;
-    const total = dayTasks.length;
-    return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
-  }, [dayTasks, formattedSelectedDate]);
+    const p = dayProgress(tasks, day);
+    return { done: p.completed, total: p.total, pct: p.percentage };
+  }, [tasks, day]);
 
   // Custom day content — shows dot indicator below the day number
   const DayContent = useCallback((props: DayContentProps) => {
     const { date } = props;
-    const ts = getSignificantTasksForDate(tasks, date);
-    const ds = format(date, 'yyyy-MM-dd');
+    const ds = toIsoDate(date);
+    const ts = significantTasksOn(tasks, ds);
 
     if (ts.length === 0) {
       return <span className="leading-none">{format(date, 'd')}</span>;
     }
 
-    const done = ts.filter(t => isTaskDoneOnDate(t, ds)).length;
+    const done = ts.filter(t => isDoneOn(t, ds)).length;
     const allDone = done === ts.length;
     const someDone = done > 0 && !allDone;
 
@@ -248,17 +217,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 />
               </div>
             </div>
-          ) : (
+          ) : dayTasks.length === 0 ? (
             <p className="text-xs text-gray-300 dark:text-gray-600 font-bold">
               Nenhuma tarefa neste dia
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* Task list */}
         <div className="lg:flex-1 lg:overflow-y-auto p-4 space-y-2">
           <AnimatePresence mode="popLayout">
-            {dayTasks.length > 0 ? (
+            {stats.total > 0 ? (
               dayTasks.map(task => (
                 <Motion.div
                   key={task.id}
@@ -268,15 +237,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   transition={{ duration: 0.15 }}
                 >
                   <TaskItem
-                    task={{
-                      ...task,
-                      completed: isTaskDoneOnDate(task, formattedSelectedDate),
-                    }}
+                    task={task}
+                    day={day}
+                    now={now}
                     category={categories.find(c => c.id === task.categoryId)}
-                    onToggle={id => onToggleTask(id, formattedSelectedDate)}
+                    dailyLogs={dailyLogs.filter(l => l.taskId === task.id)}
+                    onToggle={t => onToggleTask(t, day)}
+                    onSaveLog={onSaveLog}
                     onDelete={onDeleteTask}
                     onEdit={onEditTask}
-                    selectedDate={formattedSelectedDate}
                   />
                 </Motion.div>
               ))

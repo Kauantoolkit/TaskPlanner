@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { X, Trash2, Moon, Sun, Bell, Settings as SettingsIcon, Clock } from 'lucide-react';
-import { Settings } from '../types';
+import { Preferences as Settings } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface SettingsModalProps {
   settings: Settings;
   onUpdate: (newSettings: Settings) => void;
   onClose: () => void;
-  onClearAll: () => void;
+  /** Só o dono do workspace recebe; sem ele a zona de perigo não aparece. */
+  onClearAll?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate, onClose, onClearAll }) => {
@@ -147,6 +148,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               </div>
 
               {/* Danger Zone */}
+              {onClearAll && (
               <div className="pt-4 mt-8 border-t border-gray-100 dark:border-gray-800">
                 <h3 className="text-xs font-black text-red-400 uppercase tracking-widest px-2 mb-4">
                   Zona de Perigo
@@ -160,6 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
                   APAGAR TODOS OS DADOS
                 </button>
               </div>
+              )}
             </div>
           </div>
 
@@ -178,9 +181,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
       <ConfirmDialog
         isOpen={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
-        onConfirm={onClearAll}
+        onConfirm={() => onClearAll?.()}
         title="Apagar todos os dados"
-        description="Tem certeza que deseja apagar todos os dados? Esta ação não pode ser desfeita. Todas as suas tarefas, categorias e configurações serão perdidas permanentemente."
+        description="Tem certeza? Todas as tarefas e categorias deste workspace serão apagadas para todos os membros. Esta ação não pode ser desfeita."
         confirmText="Sim, apagar tudo"
         cancelText="Cancelar"
         variant="danger"

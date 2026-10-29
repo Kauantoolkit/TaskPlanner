@@ -1,45 +1,14 @@
-📅 PLANNER COLABORATIVO - INSTRUÇÕES
+PLANNER COLABORATIVO
 
-===================================================
-⚠️ IMPORTANTE - IGNORE A PASTA /backend
-===================================================
+Rodar:
+  npm install
+  npm run dev          → http://localhost:5173
 
-Se você baixou este projeto como ZIP, você verá uma pasta chamada "/backend".
-IGNORE COMPLETAMENTE essa pasta - ela contém código legado do Spring Boot 
-que NÃO é mais usado.
+Precisa de um projeto Supabase configurado: veja SUPABASE_SETUP.md.
 
-A aplicação agora usa APENAS Supabase como backend.
+Checagens:
+  npm run typecheck    → TypeScript
+  npm test             → regras de tarefa (src/app/domain)
+  npm run test:db      → migrations + RLS num Postgres local (supabase/tests/run.sh)
 
-===================================================
-🚀 COMO RODAR O PROJETO
-===================================================
-
-1. Instale as dependências:
-   npm install
-
-2. Rode o projeto:
-   npm run dev
-
-3. Abra no navegador:
-   http://localhost:5173
-
-Pronto! O app funciona em modo LOCAL sem nenhuma configuração.
-
-===================================================
-🔧 ATIVAR SUPABASE (OPCIONAL)
-===================================================
-
-Para ter autenticação real e dados na nuvem:
-
-1. Leia o arquivo: /SUPABASE_SETUP.md
-2. Siga os passos para criar um projeto no Supabase
-3. Configure o arquivo .env com suas credenciais
-
-===================================================
-📚 DOCUMENTAÇÃO COMPLETA
-===================================================
-
-- README.md - Documentação principal
-- SUPABASE_SETUP.md - Como configurar o Supabase
-
-===================================================
+Banco: supabase/README.md

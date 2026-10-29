@@ -1,24 +1,3 @@
-import { Task } from '../types';
-
-/**
- * Tipo para dados de criação/edição de tarefa
- * Usado em AddTaskModal
- */
-export type TaskFormData = {
-  text: string;
-  isPermanent: boolean;
-  date?: string;
-  category?: string;
-  isDelivery?: boolean;
-  deliveryDate?: string;
-  recurringType?: 'daily' | 'weekly';
-  recurringDays?: number[];
-  scheduledTime?: string;
-  estimatedDurationMinutes?: number;
-  yellowAlertMinutes?: number;
-};
-
-
 /**
  * Tipo para dados de categoria
  * Usado em CategoryModal
@@ -78,8 +57,3 @@ export const CATEGORY_COLORS = [
   { name: 'Gray', value: 'bg-gray-500 text-white' },
   { name: 'Amber', value: 'bg-amber-500 text-white' },
 ] as const;
-
-/**
- * Helper types para Task editing
- */
-export type TaskForEditing = Pick<Task, 'id' | 'text' | 'isPermanent' | 'categoryId' | 'isDelivery' | 'deliveryDate' | 'recurringType' | 'recurringDays' | 'scheduledTime' | 'estimatedDurationMinutes' | 'yellowAlertMinutes'>;

@@ -7,8 +7,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { addTaskSchema } from '../schemas/formSchemas';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Category, Task } from '../types';
-import { TaskFormData, TaskType, DAYS_OF_WEEK } from '../types/formTypes';
+import { Category } from '../types';
+import type { Task, TaskDraft, TaskKind } from '../domain/tasks';
+import { TaskType, DAYS_OF_WEEK } from '../types/formTypes';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -16,12 +17,26 @@ function cn(...inputs: ClassValue[]) {
 
 interface AddTaskModalProps {
   onClose: () => void;
-  onAdd: (task: TaskFormData) => void;
+  /** Cria (sem editingTask) ou salva a edição. */
+  onSubmit: (draft: TaskDraft) => Promise<unknown>;
   selectedDate: Date;
   categories: Category[];
   editingTask?: Task;
-  onUpdate?: (id: string, task: TaskFormData) => void;
 }
+
+// O formulário usa nomes próprios para os tipos; o banco usa `kind`
+const KIND_BY_FORM_TYPE: Record<TaskType, TaskKind> = {
+  unique: 'once',
+  permanent: 'daily',
+  weekly: 'weekly',
+  delivery: 'delivery',
+};
+const FORM_TYPE_BY_KIND: Record<TaskKind, TaskType> = {
+  once: 'unique',
+  daily: 'permanent',
+  weekly: 'weekly',
+  delivery: 'delivery',
+};
 
 // Horário padrão de fim de dia (18:00)
 const DEFAULT_END_OF_DAY_HOUR = 18;
@@ -38,24 +53,15 @@ const calculateDefaultDuration = (time: string) => {
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   onClose,
-  onAdd,
+  onSubmit: submitDraft,
   selectedDate,
   categories,
   editingTask,
-  onUpdate
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Determine task type from editing task
-  const getTaskTypeFromTask = (task?: Task): TaskType => {
-    if (!task) return 'unique';
-    if (task.isDelivery) return 'delivery';
-    if (task.isPermanent) return 'permanent';
-    if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
-      return 'weekly';
-    }
-    return 'unique';
-  };
+  const getTaskTypeFromTask = (task?: Task): TaskType => (task ? FORM_TYPE_BY_KIND[task.kind] : 'unique');
 
   const defaultTaskType = getTaskTypeFromTask(editingTask);
   const defaultScheduledTime = editingTask?.scheduledTime || '09:00';
@@ -133,25 +139,19 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const taskData: TaskFormData = {
+      const kind = KIND_BY_FORM_TYPE[data.taskType as TaskType];
+      await submitDraft({
         text: data.text,
-        isPermanent: data.taskType === 'permanent',
-        date: data.taskType === 'unique' ? format(selectedDate, 'yyyy-MM-dd') : undefined,
-        category: data.category,
-        isDelivery: data.taskType === 'delivery',
-        deliveryDate: data.taskType === 'delivery' ? data.deliveryDate : undefined,
-        recurringType: data.taskType === 'weekly' ? 'weekly' : undefined,
-        recurringDays: data.taskType === 'weekly' ? data.recurringDays : undefined,
-        scheduledTime: data.scheduledTime,
-        estimatedDurationMinutes: data.estimatedDurationMinutes,
-        yellowAlertMinutes: data.yellowAlertMinutes
-      };
-
-      if (editingTask && onUpdate) {
-        await onUpdate(editingTask.id, taskData);
-      } else {
-        await onAdd(taskData);
-      }
+        kind,
+        // Ao editar uma única, mantém o dia dela; ao criar, usa o dia aberto no planner
+        date: kind === 'once' ? (editingTask?.date ?? format(selectedDate, 'yyyy-MM-dd')) : null,
+        deliveryDate: kind === 'delivery' ? data.deliveryDate ?? null : null,
+        recurringDays: kind === 'weekly' ? data.recurringDays ?? [] : [],
+        categoryId: data.categoryId || null,
+        scheduledTime: data.scheduledTime || null,
+        estimatedDurationMinutes: data.estimatedDurationMinutes ?? null,
+        yellowAlertMinutes: data.yellowAlertMinutes ?? null,
+      });
 
       // Reset form completely
       reset({
@@ -166,8 +166,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
       });
 
       onClose();
-    } catch (error) {
-      console.error('Error submitting task:', error);
+    } catch {
+      // o hook de dados já mostrou o erro; o modal fica aberto para tentar de novo
     } finally {
       setIsSubmitting(false);
     }
