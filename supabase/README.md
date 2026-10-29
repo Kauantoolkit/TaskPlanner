@@ -19,6 +19,12 @@ painel. Este diretório é a fonte da verdade daqui pra frente.
 |---|--------------------|-----------|
 | 0000 | já aplicado (é o retrato de produção) | baseline |
 | 0001 | **pendente** | segurança de workspaces: convite validado no servidor, `create_workspace`, `join_workspace` e `regenerate_invite_code`, membros veem uns aos outros e podem sair, funções fechadas para `anon` |
+| 0002 | **pendente** | modelo de tarefas: `tasks.kind`, `recurring_days smallint[]`, `category_id` com FK, tabela `task_daily_logs`, tabela `user_preferences`, policies sem duplicatas, uma função de `updated_at` |
+
+**Antes da 0002, faça um backup** (Database → Backups no painel, ou `pg_dump`).
+Ela converte os dados existentes e apaga colunas antigas. Roda numa transação
+só: se algum dado não couber nas regras novas, nada é aplicado e o erro diz
+qual regra falhou.
 
 Para aplicar uma pendente: SQL Editor → cole o arquivo → Run → faça o deploy do
 front da mesma fase → atualize a coluna "Status" acima.
@@ -86,18 +92,21 @@ antiga, ele falha.
 
 ---
 
-## Divergências código ↔ banco (entram no rework)
+## Divergências código ↔ banco (resolvidas na fase 2)
 
-| Onde | Problema |
-|------|----------|
-| Membros | `get_workspace_members` retorna `id` (= `workspace_members.id`) e `user_id`, mas o front usa `user_id` como `id`. Como `tasks.assigned_to_id` aponta para `workspace_members.id`, `getMemberById(task.assignedToId)` nunca encontra |
-| `tasks.category` (text) | Guarda o **UUID** da categoria, sem FK. `deleteCategory` limpa as tasks por **nome**, então nunca casa e sobram UUIDs órfãos |
-| `tasks.date` | `createTask` grava a data de hoje em permanente, semanal e entrega (`?? new Date()`) |
-| `tasks.recurring_day` | Legado; substituído por `recurring_days`, mas a coluna e o índice seguem lá |
-| `settings` | `value` embrulhado em `{"value": x}`; 4 queries para ler; `upsert` sem `onConflict` |
-| Triggers | Duas funções iguais: `update_updated_at` e `update_updated_at_column`; `categories` sem `updated_at` |
-| Workspace sem membro | `workspaces` e `workspace_members` são inseridos em 2 chamadas separadas pelo front; se a 2ª falha, o workspace fica órfão (o "workspace vazio fantasma" citado em `WorkspaceContext.tsx`) |
-| Mensagens de erro | `SupabaseRepository.getTasks` manda rodar `SUPABASE_FIX_RLS_V2.sql` / `SUPABASE_CREATE.sql`, arquivos que não existem mais |
+| Onde | Problema | Correção |
+|------|----------|----------|
+| Membros | A lista usava `user_id` como `id`, mas as tarefas guardam `workspace_members.id`, então o responsável nunca era encontrado | `Member` tem `id` (o da linha) e `userId`; membros veem os colegas pela policy da 0001 |
+| `tasks.category` | Texto solto (UUID ou nome), sem FK; apagar categoria procurava pelo nome e não limpava nada | `category_id` com FK `ON DELETE SET NULL` e trigger de mesmo workspace |
+| Modal de tarefa | Mandava `category` em vez de `categoryId`: **a categoria escolhida nunca era salva** | Formulário monta um `TaskDraft` tipado |
+| Tipo da tarefa | 4 colunas (`is_permanent`, `is_delivery`, `recurring_type`, `recurring_day`) com combinações ambíguas | `kind` + CHECK dos campos obrigatórios por tipo |
+| `recurring_days` | jsonb, às vezes salvo como string (`"[1,4]"`) | `smallint[]` com CHECK 0–6; as strings são convertidas |
+| `tasks.date` | O front gravava "hoje" em toda tarefa | Só `once` tem `date` |
+| Logs das entregas | Só existiam na memória do navegador e sumiam ao recarregar | Tabela `task_daily_logs` |
+| `settings` | Por workspace, chave/valor `{"value": x}`, 4 queries para ler | `user_preferences`, uma linha por usuário. `settings` fica só leitura até a fase 4 |
+| Triggers | `update_updated_at` e `update_updated_at_column` | Só `update_updated_at` |
+| Workspace sem membro | Criado em 2 chamadas pelo front | `create_workspace` (0001); a 0002 completa os órfãos |
+| Erros | Engolidos (`catch {}`): a tela mostrava a mudança e o banco não tinha | Atualização otimista com rollback e aviso |
 
 ---
 

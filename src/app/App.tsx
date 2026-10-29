@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, CalendarCheck2, ListTodo, Menu, Loader2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import { motion as Motion, AnimatePresence } from 'motion/react';
 import { Sidebar } from './components/Sidebar';
 import { TaskItem } from './components/TaskItem';
 import { AddTaskModal } from './components/AddTaskModal';
@@ -9,22 +11,23 @@ import { CategoryModal } from './components/CategoryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CalendarView } from './components/CalendarView';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import { useDataRepository } from './hooks/useDataRepository';
-import { Toaster, toast } from 'sonner';
-import { ImageWithFallback } from './components/figma/ImageWithFallback';
-import { Task } from './types';
-import { motion as Motion, AnimatePresence } from 'motion/react';
-import { WorkspaceProvider } from './context/WorkspaceContext';
 import { MembersModal } from './components/MembersModal';
 import { LoginScreen } from './components/LoginScreen';
-import { LocalModeBanner } from './components/LocalModeBanner';
 import { AdBanner } from './components/AdBanner';
+import { ImageWithFallback } from './components/figma/ImageWithFallback';
 import { useIsMobile } from './components/ui/use-mobile';
 import { Sheet, SheetContent } from './components/ui/sheet';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { isSupabaseConfigured } from './lib/supabase';
+import { useAuth } from './auth/AuthProvider';
+import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
+import {
+  useCategories, useCategoryActions, useDailyLogs, usePreferences, useSaveDailyLog,
+  useSavePreferences, useTaskActions, useTasks,
+} from './data/hooks';
+import { clearWorkspace } from './data/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { dayProgress, tasksForDay, toIsoDate, type Task, type TaskDraft } from './domain/tasks';
 
-// Componente de loading simples
 function FullScreenLoader() {
   return (
     <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950 flex items-center justify-center">
@@ -36,87 +39,77 @@ function FullScreenLoader() {
   );
 }
 
-// Verificação de autenticação SIMPLES sem hook
-function useAuthCheck() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isConfigured, setIsConfigured] = useState(false);
-
-  useEffect(() => {
-    // Verificar se Supabase está configurado
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-    const configured = Boolean(supabaseUrl.trim() && supabaseAnonKey.trim());
-    
-    setIsConfigured(configured);
-    
-    if (!configured) {
-      // Modo local - não precisa login
-      setIsLoggedIn(true);
-      setIsLoading(false);
-      return;
-    }
-
-    // Verificar sessão do Supabase
-    import('./lib/supabase').then(({ supabase }) => {
-      supabase.auth.getSession().then(({ data }) => {
-        setIsLoggedIn(!!data?.session?.user);
-        setIsLoading(false);
-      });
-    });
-  }, []);
-
-  return { loading: isLoading, isLoggedIn, isSupabaseConfigured: isConfigured };
+function MissingConfig() {
+  return (
+    <div className="min-h-screen bg-[#fafafa] flex items-center justify-center p-6">
+      <div className="max-w-md text-center">
+        <h1 className="text-xl font-black text-gray-800 mb-2">Supabase não configurado</h1>
+        <p className="text-gray-500">
+          Defina <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> no <code>.env</code> e
+          reinicie o servidor. Veja <code>SUPABASE_SETUP.md</code>.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
-  const { loading, isLoggedIn, isSupabaseConfigured } = useAuthCheck();
-  
-  // Estados fixos que sempre existem
-  const [appState, setAppState] = useState<'loading' | 'auth' | 'app'>('loading');
-  
-  // Atualiza estado baseado na auth
-  useEffect(() => {
-    if (loading) {
-      setAppState('loading');
-    } else if (isSupabaseConfigured && !isLoggedIn) {
-      setAppState('auth');
-    } else {
-      setAppState('app');
-    }
-  }, [loading, isLoggedIn, isSupabaseConfigured]);
+  const { loading, user } = useAuth();
 
-  // Renderização baseada em estado fixo
-  if (appState === 'loading') {
-    return <FullScreenLoader />;
-  }
-
-  if (appState === 'auth') {
+  if (!isSupabaseConfigured) return <MissingConfig />;
+  if (loading) return <FullScreenLoader />;
+  if (!user) {
     return (
       <div className="min-h-screen bg-[#fafafa] dark:bg-gray-950">
-        <LoginScreen onLoginSuccess={() => {
-          // Forçar re-render após login bem-sucedido
-          window.location.reload();
-        }} />
+        <Toaster position="top-right" />
+        <LoginScreen />
       </div>
     );
   }
 
-  // App principal
   return (
-    <WorkspaceProvider>
-      <AppContent />
+    // key: trocar de usuário recria todo o estado
+    <WorkspaceProvider key={user.id}>
+      <WorkspaceGate />
     </WorkspaceProvider>
   );
 }
 
+function WorkspaceGate() {
+  const { loading, currentWorkspace } = useWorkspace();
+  if (loading || !currentWorkspace) return <FullScreenLoader />;
+  // key: trocar de workspace zera filtros, modais e o dia selecionado
+  return <AppContent key={currentWorkspace.id} />;
+}
+
+/** Relógio que atualiza a cada minuto, para os alertas de horário. */
+function useMinuteClock(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 // AppContent SEM props - todos os hooks são fixos
 function AppContent() {
-  // Hooks fixos - sempre chamados na mesma ordem
-  const repo = useDataRepository();
   const isMobile = useIsMobile();
-  
-  // Estados fixos
+  const now = useMinuteClock();
+  const queryClient = useQueryClient();
+  const { currentWorkspace, isOwner } = useWorkspace();
+
+  const tasksQuery = useTasks();
+  const tasks = tasksQuery.data ?? [];
+  const categories = useCategories().data ?? [];
+  const settings = usePreferences();
+  const savePreferences = useSavePreferences();
+  const taskActions = useTaskActions();
+  const categoryActions = useCategoryActions();
+  const deliveryIds = useMemo(() => tasks.filter(t => t.kind === 'delivery').map(t => t.id), [tasks]);
+  const dailyLogs = useDailyLogs(deliveryIds).data ?? [];
+  const saveDailyLog = useSaveDailyLog();
+
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentView, setCurrentView] = useState<'planner' | 'calendar'>('planner');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,203 +121,74 @@ function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<{ id: string; text: string } | null>(null);
 
-  // Extrai dados do repo APÓS todos os hooks
-  const { tasks, categories, settings, addTask, updateTask, deleteTask, addCategory, deleteCategory, updateSettings, clearAll, reorderTasks } = repo;
+  const day = toIsoDate(selectedDate);
 
-  const formattedSelectedDate = format(selectedDate, 'yyyy-MM-dd');
-
-  // Get current day of week (0 = Sunday, 1 = Monday, etc.)
-  const currentDayOfWeek = selectedDate.getDay();
-
-  // DnD Sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+  const filteredTasks = useMemo(
+    () => tasksForDay(tasks, day, {
+      search: searchQuery,
+      sortByTime: settings.sortByTime,
+      showCompleted: settings.showCompleted,
+    }),
+    [tasks, day, searchQuery, settings.sortByTime, settings.showCompleted],
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const stats = useMemo(() => dayProgress(tasks, day), [tasks, day]);
 
-    if (over && active.id !== over.id) {
-      const oldIndex = tasks.findIndex((task) => task.id === active.id);
-      const newIndex = tasks.findIndex((task) => task.id === over.id);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        // Reorder tasks and persist
-        const reorderedTasks = arrayMove(tasks, oldIndex, newIndex);
-        reorderTasks(reorderedTasks);
-      }
-    }
-  };
-
-  // useMemo fixos
-  const filteredTasks = useMemo(() => {
-    const filtered = tasks.filter(task => {
-      const matchesSearch = task.text.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
-
-      // Task permanente (todos os dias)
-      if (task.isPermanent) return true;
-
-      // Task semanal - aparece no(s) dia(s) da semana configurado(s)
-      if (task.recurringType === 'weekly' && task.recurringDays && task.recurringDays.length > 0) {
-        return task.recurringDays.includes(currentDayOfWeek);
-      }
-
-      // Task de entrega - aparece até a data final
-      if (task.isDelivery && task.deliveryDate) {
-        return formattedSelectedDate <= task.deliveryDate;
-      }
-
-      // Task única - aparece apenas na data específica
-      return task.date === formattedSelectedDate;
-    });
-
-    // Sort by time if enabled
-    if (settings.sortByTime) {
-      return filtered.sort((a, b) => {
-        const timeA = a.scheduledTime || '23:59';
-        const timeB = b.scheduledTime || '23:59';
-        return timeA.localeCompare(timeB);
-      });
-    }
-
-    return filtered;
-  }, [tasks, formattedSelectedDate, searchQuery, currentDayOfWeek, settings.sortByTime]);
-
-  const stats = useMemo(() => {
-    // Entregas duram vários dias — excluir da barra de progresso diário
-    const dailyTasks = filteredTasks.filter(t => !t.isDelivery);
-    const completedCount = dailyTasks.filter(task => {
-      if (task.isPermanent) {
-        return task.completedDates.includes(formattedSelectedDate);
-      }
-      // Tasks semanais também usam completedDates (como permanentes)
-      if (task.recurringType === 'weekly') {
-        return task.completedDates.includes(formattedSelectedDate);
-      }
-      return task.completed;
-    }).length;
-
-    return {
-      total: dailyTasks.length,
-      completed: completedCount,
-      percentage: dailyTasks.length > 0 ? Math.round((completedCount / dailyTasks.length) * 100) : 0
-    };
-  }, [filteredTasks, formattedSelectedDate]);
-
-  // Return condicional DEPOIS de todos os hooks
-  if (repo.loading) {
-    return <FullScreenLoader />;
+  if (tasksQuery.isPending) return <FullScreenLoader />;
+  if (tasksQuery.isError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="font-bold text-gray-700">Não foi possível carregar as tarefas.</p>
+        <p className="text-sm text-gray-400">{tasksQuery.error.message}</p>
+        <button onClick={() => tasksQuery.refetch()} className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold">
+          Tentar de novo
+        </button>
+      </div>
+    );
   }
 
-  // Handlers
-  const handleAddTask = async (newTask: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => {
-    try {
-      await addTask({
-        text: newTask.text,
-        isPermanent: newTask.isPermanent,
-        completedDates: [],
-        date: newTask.isPermanent || newTask.isDelivery || newTask.recurringType === 'weekly' ? undefined : newTask.date,
-        completed: false,
-        categoryId: newTask.categoryId,
-        isDelivery: newTask.isDelivery,
-        deliveryDate: newTask.deliveryDate,
-        recurringType: newTask.recurringType,
-        recurringDays: newTask.recurringDays,
-        scheduledTime: newTask.scheduledTime,
-        estimatedDurationMinutes: newTask.estimatedDurationMinutes,
-        yellowAlertMinutes: newTask.yellowAlertMinutes,
-      });
-      toast.success(newTask.isDelivery ? 'Entrega criada!' : newTask.recurringType === 'weekly' ? 'Tarefa semanal criada!' : 'Tarefa adicionada!');
-    } catch (err) {
-      toast.error('Erro ao adicionar tarefa');
-    }
-  };
-
-  const handleToggleTask = async (id: string, customDate?: string) => {
-    const targetDate = customDate || formattedSelectedDate;
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-
-    // Entregas usam logs diários — não têm toggle de conclusão
-    if (task.isDelivery) return;
-
-    // Tasks permanentes e semanais usam completedDates
-    if (task.isPermanent || task.recurringType === 'weekly') {
-      const isCompleted = task.completedDates.includes(targetDate);
-      const newCompletedDates = isCompleted
-        ? task.completedDates.filter(d => d !== targetDate)
-        : [...task.completedDates, targetDate];
-      await updateTask(id, { completedDates: newCompletedDates });
+  const handleSubmitTask = async (draft: TaskDraft) => {
+    if (editingTask) {
+      await taskActions.edit(editingTask.id, draft);
+      toast.success('Tarefa atualizada!');
     } else {
-      await updateTask(id, { completed: !task.completed });
+      await taskActions.create(draft);
+      toast.success(draft.kind === 'delivery' ? 'Entrega criada!' : draft.kind === 'weekly' ? 'Tarefa semanal criada!' : 'Tarefa adicionada!');
     }
   };
 
-  const handleAddDailyLog = async (taskId: string, date: string, description: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    const existing = task.dailyLogs ?? [];
-    const filtered = existing.filter(l => l.date !== date);
-    await updateTask(taskId, { dailyLogs: [...filtered, { date, description }] });
-  };
+  const handleSaveLog = (taskId: string, date: string, description: string) =>
+    saveDailyLog.mutate({ taskId, date, description });
 
   const handleDeleteTask = async (id: string) => {
-    if (settings.confirmDelete) {
-      const task = tasks.find(t => t.id === id);
-      if (task) {
-        setTaskToDelete({ id: task.id, text: task.text });
-        return;
-      }
+    const task = tasks.find(t => t.id === id);
+    if (settings.confirmDelete && task) {
+      setTaskToDelete({ id: task.id, text: task.text });
+      return;
     }
-    try {
-      await deleteTask(id);
-      toast.info('Tarefa removida');
-    } catch (err) {
-      toast.error('Erro ao remover tarefa');
-    }
+    await taskActions.remove(id).then(() => toast.info('Tarefa removida'), () => {});
   };
 
   const confirmDeleteTask = async () => {
-    if (taskToDelete) {
-      try {
-        await deleteTask(taskToDelete.id);
-        toast.info('Tarefa removida');
-        setTaskToDelete(null);
-      } catch (err) {
-        toast.error('Erro ao remover tarefa');
-      }
-    }
+    if (!taskToDelete) return;
+    await taskActions.remove(taskToDelete.id).then(() => toast.info('Tarefa removida'), () => {});
+    setTaskToDelete(null);
   };
 
-  const handleAddCategory = async (name: string, color: string) => {
-    try {
-      await addCategory(name, color);
-      toast.success('Categoria criada!');
-    } catch (err) {
-      toast.error('Erro ao criar categoria');
-    }
-  };
+  const handleAddCategory = (name: string, color: string) =>
+    categoryActions.create(name, color).then(() => toast.success('Categoria criada!'), () => {});
 
-  const handleDeleteCategory = async (id: string) => {
-    try {
-      await deleteCategory(id);
-      toast.info('Categoria removida');
-    } catch (err) {
-      toast.error('Erro ao remover categoria');
-    }
-  };
+  const handleDeleteCategory = (id: string) =>
+    categoryActions.remove(id).then(() => toast.info('Categoria removida'), () => {});
 
   const handleClearAll = async () => {
     try {
-      await clearAll();
+      await clearWorkspace(currentWorkspace!.id);
+      await queryClient.invalidateQueries();
       setIsSettingsModalOpen(false);
       toast.success('Todos os dados foram limpos.');
     } catch (err) {
-      toast.error('Erro ao limpar dados');
+      toast.error(`Erro ao limpar dados: ${(err as Error).message}`);
     }
   };
 
@@ -333,27 +197,6 @@ function AppContent() {
     if (task) {
       setEditingTask(task);
       setIsModalOpen(true);
-    }
-  };
-
-  const handleUpdateTask = async (id: string, updatedData: { text: string; isPermanent: boolean; date?: string; categoryId?: string; isDelivery?: boolean; deliveryDate?: string; recurringType?: 'daily' | 'weekly'; recurringDays?: number[]; scheduledTime?: string; estimatedDurationMinutes?: number; yellowAlertMinutes?: number }) => {
-    try {
-      await updateTask(id, {
-        text: updatedData.text,
-        isPermanent: updatedData.isPermanent,
-        date: updatedData.isPermanent || updatedData.isDelivery || updatedData.recurringType === 'weekly' ? undefined : updatedData.date,
-        categoryId: updatedData.categoryId,
-        isDelivery: updatedData.isDelivery,
-        deliveryDate: updatedData.deliveryDate,
-        recurringType: updatedData.recurringType,
-        recurringDays: updatedData.recurringDays,
-        scheduledTime: updatedData.scheduledTime,
-        estimatedDurationMinutes: updatedData.estimatedDurationMinutes,
-        yellowAlertMinutes: updatedData.yellowAlertMinutes,
-      });
-      toast.success('Tarefa atualizada!');
-    } catch (err) {
-      toast.error('Erro ao atualizar tarefa');
     }
   };
 
@@ -474,36 +317,29 @@ function AppContent() {
               {filteredTasks.length > 0 ? (
                 <AnimatePresence mode="popLayout">
                   <Motion.div
-                    key={formattedSelectedDate}
+                    key={day}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.3 }}
                     className="space-y-8 md:space-y-10"
                   >
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                      <SortableContext items={filteredTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                        <div className="grid gap-3">
-                          {filteredTasks.map(task => (
-                            <TaskItem
-                              key={task.id}
-                              task={{
-                                ...task,
-                                completed: (task.isPermanent || task.recurringType === 'weekly')
-                                  ? task.completedDates.includes(formattedSelectedDate)
-                                  : !!task.completed
-                              }}
-                              category={categories.find(c => c.id === task.categoryId)}
-                              onToggle={handleToggleTask}
-                              onDelete={handleDeleteTask}
-                              onEdit={handleEditTask}
-                              selectedDate={formattedSelectedDate}
-                              onAddDailyLog={task.isDelivery ? handleAddDailyLog : undefined}
-                            />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
+                    <div className="grid gap-3">
+                      {filteredTasks.map(task => (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          day={day}
+                          now={now}
+                          category={categories.find(c => c.id === task.categoryId)}
+                          dailyLogs={task.kind === 'delivery' ? dailyLogs.filter(l => l.taskId === task.id) : undefined}
+                          onToggle={t => taskActions.toggleDone(t, day)}
+                          onDelete={handleDeleteTask}
+                          onEdit={handleEditTask}
+                          onSaveLog={handleSaveLog}
+                        />
+                      ))}
+                    </div>
                   </Motion.div>
                 </AnimatePresence>
               ) : (
@@ -545,7 +381,11 @@ function AppContent() {
               categories={categories}
               selectedDate={selectedDate}
               onDateChange={setSelectedDate}
-              onToggleTask={handleToggleTask}
+              now={now}
+              sortByTime={settings.sortByTime}
+              dailyLogs={dailyLogs}
+              onToggleTask={taskActions.toggleDone}
+              onSaveLog={handleSaveLog}
               onDeleteTask={handleDeleteTask}
               onAddTask={() => setIsModalOpen(true)}
               onEditTask={handleEditTask}
@@ -556,11 +396,10 @@ function AppContent() {
         {isModalOpen && (
           <AddTaskModal
             onClose={handleCloseModal}
-            onAdd={handleAddTask}
+            onSubmit={handleSubmitTask}
             selectedDate={selectedDate}
             categories={categories}
             editingTask={editingTask}
-            onUpdate={handleUpdateTask}
           />
         )}
 
@@ -576,9 +415,9 @@ function AppContent() {
         {isSettingsModalOpen && (
           <SettingsModal
             settings={settings}
-            onUpdate={updateSettings}
+            onUpdate={savePreferences}
             onClose={() => setIsSettingsModalOpen(false)}
-            onClearAll={handleClearAll}
+            onClearAll={isOwner ? handleClearAll : undefined}
           />
         )}
 
@@ -599,7 +438,6 @@ function AppContent() {
           />
         )}
 
-        <LocalModeBanner />
       </div>
     </div>
   );

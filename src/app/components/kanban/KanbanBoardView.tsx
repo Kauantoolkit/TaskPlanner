@@ -14,7 +14,7 @@ import {
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { X, Plus, Loader2, BookOpen } from 'lucide-react';
-import { useKanban } from '../../hooks/useKanban';
+import { kanbanCompletion, useKanbanActions, useKanbanBoard } from '../../data/hooks';
 import { KanbanColumnComponent } from './KanbanColumn';
 import { KanbanProgress } from './KanbanProgress';
 import { DailyLog } from '../../types';
@@ -24,15 +24,13 @@ import { ptBR } from 'date-fns/locale';
 interface KanbanBoardViewProps {
   taskId: string;
   taskTitle: string;
-  workspaceId: string;
   dailyLogs?: DailyLog[];
   onClose: () => void;
 }
 
-export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = [], onClose }: KanbanBoardViewProps) {
+export function KanbanBoardView({ taskId, taskTitle, dailyLogs = [], onClose }: KanbanBoardViewProps) {
+  const { data: boardFull, isPending: loading } = useKanbanBoard(taskId);
   const {
-    boardFull,
-    loading,
     initBoard,
     moveCard,
     addCard,
@@ -42,8 +40,7 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = []
     updateColumn,
     deleteColumn,
     reorderColumns,
-    completionPercent,
-  } = useKanban(taskId);
+  } = useKanbanActions(taskId);
 
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
@@ -66,11 +63,8 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = []
       const destCards = boardFull.cards[toColumnId] ?? [];
       const overIndex = destCards.findIndex(c => c.id === over.id);
       const newOrder = overIndex === -1 ? destCards.length : overIndex;
-      try {
-        await moveCard(String(active.id), fromColumnId, toColumnId, newOrder);
-      } catch {
-        // silently handle
-      }
+      // erro já vira toast e o quadro volta ao estado anterior
+      await moveCard(String(active.id), fromColumnId, toColumnId, newOrder).catch(() => {});
     }
 
     if (activeType === 'column') {
@@ -95,7 +89,7 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = []
   const handleInit = async () => {
     setCreating(true);
     try {
-      await initBoard(workspaceId, `Kanban — ${taskTitle}`);
+      await initBoard(`Kanban — ${taskTitle}`);
     } finally {
       setCreating(false);
     }
@@ -144,7 +138,7 @@ export function KanbanBoardView({ taskId, taskTitle, workspaceId, dailyLogs = []
       {/* Board */}
       {!loading && boardFull && (
         <>
-          <KanbanProgress percent={completionPercent()} />
+          <KanbanProgress percent={kanbanCompletion(boardFull).percent} />
 
           {/* Daily progress diary */}
           {dailyLogs.length > 0 && (

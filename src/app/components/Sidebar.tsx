@@ -6,7 +6,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion as Motion, AnimatePresence } from 'motion/react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../auth/AuthProvider';
 import { toast } from 'sonner';
 import { Workspace } from '../types';
 
@@ -124,7 +125,7 @@ function WorkspaceActionModal({ mode, onClose }: {
                 type="text"
                 value={code}
                 onChange={e => setCode(e.target.value.toUpperCase())}
-                placeholder="XXXXXX"
+                placeholder="XXXXXXXX"
                 autoFocus
                 maxLength={10}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-black text-center tracking-[0.3em] text-lg focus:outline-none focus:border-blue-500 transition-all"
@@ -244,7 +245,7 @@ function WorkspaceSwitcher({ onOpenMembers }: { onOpenMembers?: () => void }) {
                     Membros
                   </button>
                 )}
-                {isSupabaseConfigured && (
+                
                   <>
                     <button
                       onClick={() => { setOpen(false); setModalMode('create'); }}
@@ -261,7 +262,6 @@ function WorkspaceSwitcher({ onOpenMembers }: { onOpenMembers?: () => void }) {
                       Entrar com código
                     </button>
                   </>
-                )}
               </div>
             </Motion.div>
           )}
@@ -295,26 +295,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const end = endOfWeek(selectedDate, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
 
+  const { signOut } = useAuth();
+  const queryClient = useQueryClient();
+
   const handleLogout = async () => {
-    if (!isSupabaseConfigured) {
-      toast.info('Modo local ativo - sem sessão para sair');
-      return;
-    }
-
     try {
-      localStorage.clear();
       sessionStorage.clear();
-
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        toast.error('Erro ao sair');
-      } else {
-        toast.success('Saiu com sucesso');
-        window.location.reload();
-      }
-    } catch (err) {
-      console.error('Erro ao sair:', err);
+      localStorage.removeItem('currentWorkspaceId');
+      await signOut();
+      // o AuthProvider volta para a tela de login; o cache não pode vazar para o próximo usuário
+      queryClient.clear();
+    } catch {
+      toast.error('Erro ao sair');
     }
   };
 
