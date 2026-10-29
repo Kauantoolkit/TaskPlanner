@@ -1,100 +1,80 @@
-# Supabase — recuperando o controle do schema
+# Supabase — schema sob controle
 
-Este diretório existe para responder uma pergunta: **o que de fato está aplicado no banco de produção?**
+Até 2026-10 o schema foi mudado colando SQL no SQL Editor, com scripts que
+foram criados, editados e apagados do repo, além de coisas feitas direto no
+painel. Este diretório é a fonte da verdade daqui pra frente.
 
-Até aqui o schema foi mudado colando SQL no SQL Editor do Supabase, com scripts
-que foram sendo criados, editados e apagados do repo. Nada registra o que rodou
-e o que não rodou. O plano é:
+| Arquivo | Para quê |
+|---------|----------|
+| `introspect.sql` | Só leitura. Tira uma foto do schema `public` (tabelas, colunas, constraints, índices, policies, funções, triggers, grants) em um JSON |
+| `snapshot.json` | Resultado do `introspect.sql` em produção, em 2026-10-29 (sem o corpo das funções, que está no baseline) |
+| `migrations/0000_baseline.sql` | Recria produção do zero. **Não rodar em produção**, ele já está lá |
+| `migrations/NNNN_*.sql` | Toda mudança nova. Rodar na ordem, uma vez cada, e commitar antes |
+| `historico/` | Os SQLs antigos recuperados do git, só para consulta |
 
-1. **Tirar uma foto do banco real** → `introspect.sql` (só leitura).
-2. **Comparar com a reconstrução abaixo**, pra saber o que difere.
-3. **Gerar um baseline** (`migrations/0000_baseline.sql`) idêntico ao banco real.
-4. A partir daí, **toda mudança vira um arquivo numerado** em `migrations/`, e nada mais é colado direto no painel.
+**Validação do baseline:** aplicado num Postgres limpo e reintrospectado, deu
+**0 diferenças** com o `snapshot.json`: colunas, constraints, índices, as 32
+policies com o mesmo texto, triggers, grants e as 12 funções.
 
----
+Para checar se o banco continua batendo com o repo, rode `introspect.sql` de
+novo e compare com o `snapshot.json`.
 
-## Passo 1 — rodar a introspecção
-
-Supabase → SQL Editor → cole `supabase/introspect.sql` → Run.
-Retorna uma linha com um JSON: tabelas, colunas, constraints, índices,
-policies RLS, funções/RPCs (com o código-fonte), triggers e grants.
-Salve como `supabase/snapshot.json`.
-
-> O script foi testado num Postgres 16 local com o histórico reaplicado.
-> Ele não grava nada.
-
----
-
-## Histórico reconstruído (git)
-
-Todos os SQLs que já existiram no repo, inclusive os 10 apagados no commit
-`5b468f8`, estão em `historico/`, prefixados na ordem cronológica dos commits.
-Reaplicando todos nessa ordem num Postgres limpo:
-
-| # | Arquivo | Data | Efeito | Reaplicado em ordem |
-|---|---------|------|--------|---------------------|
-| 01 | SUPABASE_CREATE | 02-28 | Cria as 5 tabelas, RLS, triggers `updated_at` | OK |
-| 02 | SUPABASE_RESET | 02-28 | **Dropa tudo.** Se rodou depois de dados existirem, apagou dados | (não reaplicado) |
-| 03 | SUPABASE_FIX_RLS | 02-28 | Troca policies (corrige recursão 42P17), GRANTs | OK |
-| 04 | SUPABASE_FIX_RLS_V2 | 03-02 | Troca policies de novo; cria `"Members can add themselves"`; insere owners em `workspace_members` | OK |
-| 05 | SUPABASE_SIMPLE_FIX | 03-02 | `completed_dates DATE[]` | OK |
-| 06 | SUPABASE_ADD_COLUMNS | 03-02 | `completed_dates DATE[]` (idem) | OK |
-| 07 | SUPABASE_COMPLETE_FIX | 03-02 | Coluna + policies | **FALHA** se rodado após o 04 (`policy "Members can add themselves" already exists`) → rollback total. Provavelmente nunca teve efeito; também não faria falta |
-| 08 | SUPABASE_ADD_RECURRING | 03-03 | `recurring_type`, `recurring_day` + índices | OK |
-| 09 | SUPABASE_ADD_TIME_COLUMNS | 03-03 | `scheduled_time`, `estimated_duration_minutes`, `yellow_alert_minutes`, `started_at` | OK |
-| 10 | SUPABASE_ADD_MULTIDAY_WEEKLY | 03-03 | `recurring_days JSONB` + índice GIN | OK |
-| — | `../MIGRATIONS.sql` | 03-16/17 | `date` nullable, unique em settings, `sortByTime`, `invite_code` + 2 policies | OK |
-| — | `../KANBAN_MIGRATION.sql` | 03-17 | 3 tabelas kanban, triggers, RLS, 4 RPCs | OK |
-
-### O que o código usa e **não está em nenhum SQL do repo**
-
-Estas duas RPCs são chamadas por `src/app/context/WorkspaceContext.tsx`, mas
-nunca foram commitadas. Ou foram criadas direto no painel, ou não existem
-(e a feature falha em silêncio). A introspecção vai mostrar o código delas.
-
-- `get_workspace_members(p_workspace_id)` — lista de membros (as policies do V2
-  só deixam um membro ver **a própria linha**, então foi preciso uma RPC
-  `SECURITY DEFINER` para contornar isso)
-- `get_workspace_by_invite_code(p_code)` — entrar via convite
-
-### Incertezas que só o snapshot resolve
-
-- Se o `RESET` rodou **depois** de dados reais existirem.
-- Se as policies de `MIGRATIONS.sql` #4 estão ativas (ver segurança abaixo).
-- Se `MIGRATIONS.sql` #1 (`date` nullable) foi aplicado. O código ainda manda
-  a data de hoje como fallback, então não dá pra deduzir pelos dados.
-- Policies, colunas ou funções criadas direto pela UI do Supabase.
+> Limitação: os `grants` do snapshot só mostram o que foi concedido pelo role
+> `postgres`. Os grants padrão do Supabase (feitos por `supabase_admin`) não
+> aparecem.
 
 ---
 
-## ⚠️ Problema de segurança (urgente se as policies do #4 estiverem ativas)
+## ⚠️ Segurança: entrar em workspace sem convite
 
-`MIGRATIONS.sql` #4 criou duas policies que abrem o banco. Reproduzido no
-Postgres local, com os GRANTs padrão do Supabase:
+Boa notícia: quem não está logado **não** lista workspaces nem tarefas.
 
-1. `"anyone can read workspace by invite_code"` — `USING (true)` sem `TO`:
-   **qualquer pessoa, inclusive sem login (anon key, que é pública no bundle),
-   lista todos os workspaces com os `invite_code`.**
-2. `"authenticated users can join via invite_code"` — só checa
-   `user_id = auth.uid()`. O código de convite **não é validado no servidor**.
-   Qualquer usuário logado se insere em qualquer workspace, **com
-   `role = 'owner'` se quiser**, e passa a ler as tarefas dele.
+O problema: há 3 policies de INSERT em `workspace_members` (`"Members can add
+themselves"`, `"Members can join workspaces"` e `"authenticated users can join
+via invite_code"`) que só checam `user_id = auth.uid()`. **O código de convite
+não é validado no servidor.** Testado contra o baseline (= produção):
 
-Teste local: um usuário que não é membro inseriu a si mesmo como `owner` no
-workspace de outro e leu `"tarefa privada"`.
+1. Um usuário logado que sabe o UUID de um workspace se insere nele, **inclusive
+   com `role = 'owner'`**, e passa a ler e editar as tarefas.
+2. O UUID sai da `get_workspace_by_invite_code`, que **responde até para quem
+   não está logado**. Dá pra testar códigos em sequência: os gerados pelo
+   `MIGRATIONS.sql` têm 6 caracteres hex, cerca de 16 milhões de combinações.
+   Ou a pessoa simplesmente já foi membro: **membro removido consegue voltar
+   sozinho**.
 
-A correção (policies fechadas e entrada só via RPC que valida o código) vai no
-primeiro migration após o baseline. Se quiser fechar **já**, antes do rework, rode:
+Correção prevista na `0001`:
+- remover as 3 policies;
+- criar a RPC `join_workspace(code)`, que valida o código e insere sempre como
+  `member`;
+- deixar só o dono inserir a própria linha de owner ao criar o workspace;
+- revogar o `EXECUTE` de `anon` nas funções.
 
-```sql
-DROP POLICY IF EXISTS "anyone can read workspace by invite_code" ON public.workspaces;
-DROP POLICY IF EXISTS "authenticated users can join via invite_code" ON public.workspace_members;
-DROP POLICY IF EXISTS "Members can add themselves" ON public.workspace_members;
-```
+Exige mudar o `joinWorkspace` do front **no mesmo deploy**.
 
-Efeito colateral: "entrar via convite" para de funcionar até a RPC nova
-existir, a não ser que `get_workspace_by_invite_code` já seja `SECURITY DEFINER`
-e faça o insert ela mesma (o snapshot mostra).
+---
+
+## O que o snapshot revelou (vs. os SQLs do repo)
+
+**Criado direto no painel, sem SQL no repo:**
+- funções `get_my_workspace_ids`, `get_my_workspace_invite_code` (não usada
+  pelo front), `get_workspace_by_invite_code` e `get_workspace_members`, todas
+  `SECURITY DEFINER`;
+- policies de `workspaces` renomeadas (`authenticated_can_create_workspace`,
+  `owner_can_*`), com o SELECT passando a usar `get_my_workspace_ids()`;
+- `workspace_members`: `"Members can join workspaces"` e `owner_can_remove_members`.
+  O SELECT só mostra **a própria linha**, por isso a lista de membros depende
+  da RPC. Um membro também não consegue sair do workspace sozinho;
+- `tasks`: DELETE só para criador, responsável ou dono; UPDATE também para o dono;
+- `kanban_*`: um 2º conjunto de policies (`"... in their boards"`) sobreposto
+  ao do `KANBAN_MIGRATION.sql`. É redundante, mas não causa problema.
+
+**`MIGRATIONS.sql` foi aplicado só em partes:**
+- #1 (`date` nullable): aplicado;
+- #2 (2ª unique em settings): **não** aplicado. Só existe a original, o que está certo;
+- #3 (`sortByTime`): provavelmente não (9 linhas de settings para 7 workspaces).
+  Sem impacto, porque o front usa `true` como padrão;
+- #4: coluna, unique e a policy de join aplicados. A policy
+  `"anyone can read workspace by invite_code"` (`USING (true)`) **não existe**.
 
 ---
 
@@ -102,11 +82,33 @@ e faça o insert ela mesma (o snapshot mostra).
 
 | Onde | Problema |
 |------|----------|
+| Membros | `get_workspace_members` retorna `id` (= `workspace_members.id`) e `user_id`, mas o front usa `user_id` como `id`. Como `tasks.assigned_to_id` aponta para `workspace_members.id`, `getMemberById(task.assignedToId)` nunca encontra |
 | `tasks.category` (text) | Guarda o **UUID** da categoria, sem FK. `deleteCategory` limpa as tasks por **nome**, então nunca casa e sobram UUIDs órfãos |
-| `tasks.assigned_to_id` | Aponta para `workspace_members.id`, mas a lista `members` do front usa `user_id` como `id`, então `getMemberById(task.assignedToId)` não encontra |
 | `tasks.date` | `createTask` grava a data de hoje em permanente, semanal e entrega (`?? new Date()`) |
 | `tasks.recurring_day` | Legado; substituído por `recurring_days`, mas a coluna e o índice seguem lá |
-| `settings` | Duas unique constraints iguais (`settings_workspace_id_key_key` e `settings_workspace_key_unique`); `value` embrulhado em `{"value": x}`; 4 queries para ler |
+| `settings` | `value` embrulhado em `{"value": x}`; 4 queries para ler; `upsert` sem `onConflict` |
 | Triggers | Duas funções iguais: `update_updated_at` e `update_updated_at_column`; `categories` sem `updated_at` |
 | Workspace sem membro | `workspaces` e `workspace_members` são inseridos em 2 chamadas separadas pelo front; se a 2ª falha, o workspace fica órfão (o "workspace vazio fantasma" citado em `WorkspaceContext.tsx`) |
 | Mensagens de erro | `SupabaseRepository.getTasks` manda rodar `SUPABASE_FIX_RLS_V2.sql` / `SUPABASE_CREATE.sql`, arquivos que não existem mais |
+
+---
+
+## Histórico (git)
+
+Os 10 SQLs apagados no commit `5b468f8` estão em `historico/`, em ordem
+cronológica. Reaplicando todos num Postgres limpo:
+
+| # | Arquivo | Data | Efeito | Reaplicado em ordem |
+|---|---------|------|--------|---------------------|
+| 01 | SUPABASE_CREATE | 02-28 | Cria as 5 tabelas, RLS, triggers `updated_at` | OK |
+| 02 | SUPABASE_RESET | 02-28 | **Dropa tudo** | (não reaplicado) |
+| 03 | SUPABASE_FIX_RLS | 02-28 | Troca policies (recursão 42P17), GRANTs | OK |
+| 04 | SUPABASE_FIX_RLS_V2 | 03-02 | Troca policies; insere owners em `workspace_members` | OK |
+| 05 | SUPABASE_SIMPLE_FIX | 03-02 | `completed_dates DATE[]` | OK |
+| 06 | SUPABASE_ADD_COLUMNS | 03-02 | idem | OK |
+| 07 | SUPABASE_COMPLETE_FIX | 03-02 | Coluna + policies | **FALHA** após o 04 → rollback |
+| 08 | SUPABASE_ADD_RECURRING | 03-03 | `recurring_type`, `recurring_day` | OK |
+| 09 | SUPABASE_ADD_TIME_COLUMNS | 03-03 | colunas de horário | OK |
+| 10 | SUPABASE_ADD_MULTIDAY_WEEKLY | 03-03 | `recurring_days JSONB` | OK |
+| — | `../MIGRATIONS.sql` | 03-16/17 | ver acima: aplicado em partes | — |
+| — | `../KANBAN_MIGRATION.sql` | 03-17 | tabelas kanban, triggers, RLS, RPCs | OK |
