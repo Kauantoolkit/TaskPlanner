@@ -38,16 +38,6 @@ const LOCAL_WORKSPACE: Workspace = {
   createdAt: new Date().toISOString(),
 };
 
-function generateInviteCode(): string {
-  // 8 chars from crypto random — ~2.8 trilhões de combinações vs ~2 bilhões do Math.random 6-char
-  const arr = new Uint8Array(6);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, b => b.toString(36).padStart(2, '0'))
-    .join('')
-    .substring(0, 8)
-    .toUpperCase();
-}
-
 export function WorkspaceProvider({ children }: { children: ReactNode }): React.ReactElement {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('');
@@ -150,34 +140,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
 
       if (allWorkspacesData.length === 0) {
         // Create initial personal workspace (only when truly no workspace exists)
-        const { data: newWs } = await supabase
-          .from('workspaces')
-          .insert({ name: 'Meu Workspace', type: 'personal', owner_id: user.id })
-          .select('id, name, type, owner_id, created_at')
-          .single();
+        const { data: rows, error: createError } = await supabase
+          .rpc('create_workspace', { p_name: 'Meu Workspace', p_type: 'personal' });
+        const newWs = rows?.[0];
 
+        if (createError) throw createError;
         if (newWs) {
-          const { data: newMember } = await supabase
-            .from('workspace_members')
-            .insert({
-              workspace_id: newWs.id,
-              user_id: user.id,
-              role: 'owner',
-              name: user.email?.split('@')[0] || 'Usuário',
-              email: user.email || '',
-            })
-            .select('id')
-            .single();
-
-          allWorkspacesData = [newWs];
           setWorkspaces([{
-            id: newWs.id, name: newWs.name, type: newWs.type,
+            id: newWs.workspace_id, name: newWs.name, type: newWs.type,
             ownerId: newWs.owner_id, memberIds: [], createdAt: newWs.created_at,
+            inviteCode: newWs.invite_code,
           }]);
-          setCurrentWorkspaceId(newWs.id);
-          setCurrentMemberId(newMember?.id || '');
-          localStorage.setItem('currentWorkspaceId', newWs.id);
-          setMembers([{ id: user.id, name: user.email?.split('@')[0] || 'Usuário', email: user.email || '', role: 'owner' }]);
+          setCurrentWorkspaceId(newWs.workspace_id);
+          setCurrentMemberId(newWs.member_id);
+          localStorage.setItem('currentWorkspaceId', newWs.workspace_id);
+          await loadMembersForWorkspace(newWs.workspace_id);
           setLoading(false);
           return;
         }
@@ -276,111 +253,52 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): React.
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Não autenticado');
-
-    const { data: newWs, error } = await supabase
-      .from('workspaces')
-      .insert({ name, type, owner_id: user.id })
-      .select('id, name, type, owner_id, created_at')
-      .single();
+    const { data: rows, error } = await supabase
+      .rpc('create_workspace', { p_name: name, p_type: type });
 
     if (error) throw error;
-
-    const { data: newMember } = await supabase
-      .from('workspace_members')
-      .insert({
-        workspace_id: newWs.id,
-        user_id: user.id,
-        role: 'owner',
-        name: user.email?.split('@')[0] || 'Usuário',
-        email: user.email || '',
-      })
-      .select('id')
-      .single();
-
-    // Try to generate invite_code (only works after migration #4)
-    let inviteCode: string | undefined;
-    try {
-      inviteCode = generateInviteCode();
-      await supabase.from('workspaces').update({ invite_code: inviteCode }).eq('id', newWs.id);
-    } catch {
-      inviteCode = undefined;
-    }
+    const newWs = rows[0];
 
     const workspace: Workspace = {
-      id: newWs.id, name: newWs.name, type: newWs.type,
-      ownerId: newWs.owner_id, memberIds: [user.id],
-      createdAt: newWs.created_at, inviteCode,
+      id: newWs.workspace_id, name: newWs.name, type: newWs.type,
+      ownerId: newWs.owner_id, memberIds: [],
+      createdAt: newWs.created_at, inviteCode: newWs.invite_code,
     };
 
     setWorkspaces(prev => [...prev, workspace]);
-    setCurrentWorkspaceId(newWs.id);
-    setCurrentMemberId(newMember?.id || '');
-    localStorage.setItem('currentWorkspaceId', newWs.id);
-    setMembers([{ id: user.id, name: user.email?.split('@')[0] || 'Usuário', email: user.email || '', role: 'owner' }]);
-  }, []);
+    setCurrentWorkspaceId(newWs.workspace_id);
+    setCurrentMemberId(newWs.member_id);
+    localStorage.setItem('currentWorkspaceId', newWs.workspace_id);
+    await loadMembersForWorkspace(newWs.workspace_id);
+  }, [loadMembersForWorkspace]);
 
   const joinWorkspace = useCallback(async (code: string) => {
     if (!isSupabaseConfigured) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Não autenticado');
+    // Code is validated server-side; the RPC inserts the member row as 'member'
+    const { data: rows, error } = await supabase
+      .rpc('join_workspace', { p_code: code.trim() });
 
-    // Use RPC to avoid exposing all workspaces via direct table SELECT
-    const { data: wsRows, error } = await supabase
-      .rpc('get_workspace_by_invite_code', { p_code: code.trim() });
-
-    if (error || !wsRows || wsRows.length === 0) throw new Error('Código de convite inválido');
-    const ws = wsRows[0];
-
-    // Check if already a member
-    const { data: existing } = await supabase
-      .from('workspace_members')
-      .select('id')
-      .eq('workspace_id', ws.id)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    let memberId = existing?.id || '';
-
-    if (!existing) {
-      const { data: newMember, error: joinError } = await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: ws.id,
-          user_id: user.id,
-          role: 'member',
-          name: user.email?.split('@')[0] || 'Usuário',
-          email: user.email || '',
-        })
-        .select('id')
-        .single();
-
-      if (joinError) throw joinError;
-      memberId = newMember?.id || '';
-    }
+    if (error || !rows || rows.length === 0) throw new Error('Código de convite inválido');
+    const ws = rows[0];
 
     const newWorkspace: Workspace = {
-      id: ws.id, name: ws.name, type: ws.type,
+      id: ws.workspace_id, name: ws.name, type: ws.type,
       ownerId: ws.owner_id, memberIds: [], createdAt: ws.created_at,
     };
 
-    setWorkspaces(prev => prev.find(w => w.id === ws.id) ? prev : [...prev, newWorkspace]);
-    setCurrentWorkspaceId(ws.id);
-    setCurrentMemberId(memberId);
-    localStorage.setItem('currentWorkspaceId', ws.id);
-    await loadMembersForWorkspace(ws.id);
+    setWorkspaces(prev => prev.find(w => w.id === ws.workspace_id) ? prev : [...prev, newWorkspace]);
+    setCurrentWorkspaceId(ws.workspace_id);
+    setCurrentMemberId(ws.member_id);
+    localStorage.setItem('currentWorkspaceId', ws.workspace_id);
+    await loadMembersForWorkspace(ws.workspace_id);
   }, [loadMembersForWorkspace]);
 
   const regenerateInviteCode = useCallback(async () => {
     if (!isSupabaseConfigured || !currentWorkspaceId) return;
 
-    const newCode = generateInviteCode();
-    const { error } = await supabase
-      .from('workspaces')
-      .update({ invite_code: newCode })
-      .eq('id', currentWorkspaceId);
+    const { data: newCode, error } = await supabase
+      .rpc('regenerate_invite_code', { p_workspace_id: currentWorkspaceId });
 
     if (error) throw error;
 

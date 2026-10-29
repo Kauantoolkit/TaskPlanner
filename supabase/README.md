@@ -10,7 +10,29 @@ painel. Este diretório é a fonte da verdade daqui pra frente.
 | `snapshot.json` | Resultado do `introspect.sql` em produção, em 2026-10-29 (sem o corpo das funções, que está no baseline) |
 | `migrations/0000_baseline.sql` | Recria produção do zero. **Não rodar em produção**, ele já está lá |
 | `migrations/NNNN_*.sql` | Toda mudança nova. Rodar na ordem, uma vez cada, e commitar antes |
+| `tests/` | Testes das migrations num Postgres local (`tests/run.sh`) |
 | `historico/` | Os SQLs antigos recuperados do git, só para consulta |
+
+### Migrations
+
+| # | Status em produção | O que faz |
+|---|--------------------|-----------|
+| 0000 | já aplicado (é o retrato de produção) | baseline |
+| 0001 | **pendente** | segurança de workspaces: convite validado no servidor, `create_workspace`, `join_workspace` e `regenerate_invite_code`, membros veem uns aos outros e podem sair, funções fechadas para `anon` |
+
+Para aplicar uma pendente: SQL Editor → cole o arquivo → Run → faça o deploy do
+front da mesma fase → atualize a coluna "Status" acima.
+
+### Testes
+
+Precisa de um Postgres local (ex.: `docker run -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 postgres:17`):
+
+```bash
+PGHOST=localhost PGUSER=postgres supabase/tests/run.sh
+```
+
+O script cria um banco descartável, aplica `_stub_supabase.sql` (imitação
+mínima do `auth` do Supabase), todas as migrations e roda os `*.test.sql`.
 
 **Validação do baseline:** aplicado num Postgres limpo e reintrospectado, deu
 **0 diferenças** com o `snapshot.json`: colunas, constraints, índices, as 32
@@ -25,31 +47,17 @@ novo e compare com o `snapshot.json`.
 
 ---
 
-## ⚠️ Segurança: entrar em workspace sem convite
+## Segurança: entrar em workspace sem convite (corrigido na 0001)
 
-Boa notícia: quem não está logado **não** lista workspaces nem tarefas.
+No baseline havia 3 policies de INSERT em `workspace_members` que só checavam
+`user_id = auth.uid()`. Qualquer usuário logado que soubesse o UUID de um
+workspace se inseria nele, inclusive como `owner`. O UUID saía da
+`get_workspace_by_invite_code`, que respondia até sem login. Quem não está
+logado nunca conseguiu listar workspaces nem tarefas.
 
-O problema: há 3 policies de INSERT em `workspace_members` (`"Members can add
-themselves"`, `"Members can join workspaces"` e `"authenticated users can join
-via invite_code"`) que só checam `user_id = auth.uid()`. **O código de convite
-não é validado no servidor.** Testado contra o baseline (= produção):
-
-1. Um usuário logado que sabe o UUID de um workspace se insere nele, **inclusive
-   com `role = 'owner'`**, e passa a ler e editar as tarefas.
-2. O UUID sai da `get_workspace_by_invite_code`, que **responde até para quem
-   não está logado**. Dá pra testar códigos em sequência: os gerados pelo
-   `MIGRATIONS.sql` têm 6 caracteres hex, cerca de 16 milhões de combinações.
-   Ou a pessoa simplesmente já foi membro: **membro removido consegue voltar
-   sozinho**.
-
-Correção prevista na `0001`:
-- remover as 3 policies;
-- criar a RPC `join_workspace(code)`, que valida o código e insere sempre como
-  `member`;
-- deixar só o dono inserir a própria linha de owner ao criar o workspace;
-- revogar o `EXECUTE` de `anon` nas funções.
-
-Exige mudar o `joinWorkspace` do front **no mesmo deploy**.
+A `0001` fecha isso. `tests/0001_seguranca_workspaces.test.sql` cobre os ataques
+e os fluxos legítimos. O teste foi conferido ao contrário: recolocando a policy
+antiga, ele falha.
 
 ---
 
